@@ -1,0 +1,78 @@
+type: custom:apexcharts-card
+header:
+  show: false
+graph_span: 24h
+apex_config:
+  legend:
+    show: false
+  chart:
+    toolbar:
+      show: false
+  grid:
+    show: false
+  xaxis:
+    labels:
+      show: false
+    axisTicks:
+      show: false
+    axisBorder:
+      show: false
+    tooltip:
+      enabled: false
+yaxis:
+  - id: temp
+    min: 65
+    max: 80
+    show: false
+  - id: humidity
+    opposite: true
+    min: 40
+    max: 70
+    show: false
+series:
+  # AC running for temperature - light blue
+  - entity: binary_sensor.coordinated_ac_for_temp
+    name: AC (Temp)
+    color: "#90CAF9"
+    type: area
+    curve: stepline
+    transform: "return x === 'on' || x === 'True' || x === true ? 80 : 65;"
+    yaxis_id: temp
+    stroke_width: 0
+    opacity: 0.3
+
+  # AC running for humidity - light orange
+  - entity: binary_sensor.coordinated_ac_for_humidity
+    name: AC (Humidity)
+    color: "#FFB74D"
+    type: area
+    curve: stepline
+    transform: "return x === 'on' || x === 'True' || x === true ? 80 : 65;"
+    yaxis_id: temp
+    stroke_width: 0
+    opacity: 0.3
+
+  # Standalone dehumidifier - light red
+  - entity: binary_sensor.coordinated_standalone_running
+    name: Standalone
+    color: "#EF9A9A"
+    type: area
+    curve: stepline
+    transform: "return x === 'on' || x === 'True' || x === true ? 80 : 65;"
+    yaxis_id: temp
+    stroke_width: 0
+    opacity: 0.3
+
+  # Temperature line
+  - entity: sensor.third_reality_inc_3rths24bz_temperature
+    name: Temp
+    color: "#03A9F4"
+    yaxis_id: temp
+    stroke_width: 2
+
+  # Humidity line
+  - entity: sensor.max_indoor_humidity_sensor
+    name: Humidity
+    color: "#4CAF50"
+    yaxis_id: humidity
+    stroke_width: 2

@@ -1,0 +1,14 @@
+type: custom:mushroom-template-card
+primary: "Indoor: {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | default(0) | round(1) }}°F"
+icon: mdi:snowflake
+icon_color: |
+  {% if states('climate.coordinated_thermostat') == 'off' %}
+    grey
+  {% elif is_state('input_boolean.coordinated_humidity_active', 'on') %}
+    orange
+  {% else %}
+    blue
+  {% endif %}
+tap_action:
+  action: more-info
+entity: climate.coordinated_thermostat

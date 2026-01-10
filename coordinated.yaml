@@ -1,0 +1,418 @@
+# ==============================================================================
+# COORDINATED COOLER CONTROL PACKAGE v6.0
+# ==============================================================================
+#
+# A simple, elegant approach to coordinating AC and humidity control using
+# the generic_thermostat's built-in preset system.
+#
+# HOW IT WORKS:
+#   1. Normal operation: Thermostat runs at your chosen preset (home/sleep/away)
+#   2. High humidity (>50%): Lowers to floor temperature (default 70°F) to dehumidify
+#   3. If AC can't clear humidity (temp at floor): Standalone dehumidifier helps
+#   4. Humidity normal (<47%): Returns to previous temperature
+#
+# ==============================================================================
+
+# ==============================================================================
+# USER CONFIGURATION
+# ==============================================================================
+# Adjust these values via Home Assistant dashboard or edit defaults here.
+
+input_number:
+  coordinated_humidity_on_threshold:
+    name: "Humidity ON Threshold"
+    min: 40
+    max: 70
+    step: 1
+    initial: 50
+    unit_of_measurement: "%"
+    icon: mdi:water-plus
+    # Humidity level that triggers dehumidification mode
+
+  coordinated_humidity_off_threshold:
+    name: "Humidity OFF Threshold"
+    min: 35
+    max: 65
+    step: 1
+    initial: 47
+    unit_of_measurement: "%"
+    icon: mdi:water-minus
+    # Humidity level that returns to normal preset
+
+  coordinated_humidity_floor_temp:
+    name: "Humidity Floor Temperature"
+    min: 65
+    max: 75
+    step: 1
+    initial: 70
+    unit_of_measurement: "°F"
+    icon: mdi:thermometer-low
+    # Temperature to cool to when dehumidifying (lower = more aggressive)
+
+  coordinated_previous_temp:
+    name: "Previous Temperature"
+    min: 65
+    max: 85
+    step: 1
+    initial: 76
+    unit_of_measurement: "°F"
+    # Stores the temperature to restore if no preset was active
+
+# ==============================================================================
+# INTERNAL STATE
+# ==============================================================================
+
+input_boolean:
+  coordinated_humidity_active:
+    name: "Humidity Control Active"
+    initial: off
+    icon: mdi:water-alert
+
+  coordinated_humidity_suppressed:
+    name: "Humidity Control Suppressed"
+    initial: off
+    icon: mdi:water-off
+    # Prevents re-entry after manual override until humidity drops below threshold
+
+# ==============================================================================
+# TEMPLATE SENSORS
+# ==============================================================================
+
+template:
+  - binary_sensor:
+      - name: "Coordinated AC Running"
+        unique_id: coordinated_ac_running
+        state: "{{ states('switch.meross_cool_switch') }}"
+        icon: mdi:snowflake
+
+      - name: "Coordinated AC For Temp"
+        unique_id: coordinated_ac_for_temp
+        state: "{{ is_state('switch.meross_cool_switch', 'on') and is_state('input_boolean.coordinated_humidity_active', 'off') }}"
+        icon: mdi:thermometer
+
+      - name: "Coordinated AC For Humidity"
+        unique_id: coordinated_ac_for_humidity
+        state: "{{ is_state('switch.meross_cool_switch', 'on') and is_state('input_boolean.coordinated_humidity_active', 'on') }}"
+        icon: mdi:water-percent
+
+      - name: "Coordinated Standalone Running"
+        unique_id: coordinated_standalone_running
+        state: "{{ is_state('humidifier.151732605035846_humidifier', 'on') }}"
+        icon: mdi:air-humidifier
+
+# ==============================================================================
+# CLIMATE - GENERIC THERMOSTAT
+# ==============================================================================
+
+climate:
+  - platform: generic_thermostat
+    name: "Coordinated Thermostat"
+    unique_id: coordinated_thermostat
+    heater: switch.meross_cool_switch
+    target_sensor: sensor.third_reality_inc_3rths24bz_temperature
+    ac_mode: true
+    initial_hvac_mode: "cool"
+    min_temp: 65
+    max_temp: 85
+    target_temp: 76
+    hot_tolerance: 1.5
+    cold_tolerance: 0.5
+    min_cycle_duration:
+      minutes: 15
+    away_temp: 78
+    home_temp: 76
+    sleep_temp: 73
+    activity_temp: 70
+    precision: 0.1
+    target_temp_step: 1
+
+# ==============================================================================
+# AUTOMATIONS
+# ==============================================================================
+
+automation:
+  # ============================================================================
+  # HUMIDITY HIGH - Activate Activity Preset
+  # ============================================================================
+  - id: coordinated_humidity_high
+    alias: "Coordinated: Humidity High - Activate Dehumidification"
+    description: "Switch to activity preset when humidity exceeds threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.max_indoor_humidity_sensor
+        above: input_number.coordinated_humidity_on_threshold
+    condition:
+      # Only trigger if not already in humidity control mode
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_active
+        state: "off"
+      # And not suppressed due to manual override
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_suppressed
+        state: "off"
+    action:
+      # Save current temperature
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.coordinated_previous_temp
+        data:
+          value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) }}"
+
+      # Mark humidity control as active
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.coordinated_humidity_active
+
+      # Lower to floor temperature for dehumidification
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.coordinated_thermostat
+        data:
+          temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
+
+      # Notify
+      - service: notify.mobile_app_midnight
+        data:
+          title: "🌡️ Humidity High"
+          message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%. Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
+
+      # Log
+      - service: system_log.write
+        data:
+          message: "Coordinated: Humidity {{ states('sensor.max_indoor_humidity_sensor') }}% > threshold, lowering to {{ states('input_number.coordinated_humidity_floor_temp') }}°F"
+          level: warning
+    mode: single
+
+  # ============================================================================
+  # HUMIDITY NORMAL - Restore Previous Temperature
+  # ============================================================================
+  - id: coordinated_humidity_normal
+    alias: "Coordinated: Humidity Normal - Restore Temperature"
+    description: "Return to previous temperature when humidity drops below threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.max_indoor_humidity_sensor
+        below: input_number.coordinated_humidity_off_threshold
+    condition:
+      # Only trigger if in humidity control mode
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_active
+        state: "on"
+    action:
+      # Only restore temp if still at floor temp (no manual override)
+      - if:
+          - condition: template
+            value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float == states('input_number.coordinated_humidity_floor_temp') | float }}"
+        then:
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
+          - service: notify.mobile_app_midnight
+            data:
+              title: "✅ Humidity Normal"
+              message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Restored to {{ states('input_number.coordinated_previous_temp') | int }}°F."
+        else:
+          - service: notify.mobile_app_midnight
+            data:
+              title: "✅ Humidity Normal"
+              message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Keeping your manual settings."
+
+      # Mark humidity control as inactive
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_humidity_active
+
+      # Turn off standalone if it was running
+      - service: humidifier.turn_off
+        target:
+          entity_id: humidifier.151732605035846_humidifier
+
+      # Log
+      - service: system_log.write
+        data:
+          message: "Coordinated: Humidity {{ states('sensor.max_indoor_humidity_sensor') }}% < threshold, exiting humidity mode"
+          level: warning
+    mode: single
+
+  # ============================================================================
+  # STANDALONE FALLBACK - AC Off But Humidity Still High
+  # ============================================================================
+  - id: coordinated_standalone_fallback
+    alias: "Coordinated: Standalone Fallback"
+    description: "Turn on standalone dehumidifier when AC can't help anymore"
+    trigger:
+      # AC turns off
+      - platform: state
+        entity_id: switch.meross_cool_switch
+        to: "off"
+    condition:
+      # Only if humidity control is active
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_active
+        state: "on"
+      # And humidity is still above OFF threshold
+      - condition: numeric_state
+        entity_id: sensor.max_indoor_humidity_sensor
+        above: input_number.coordinated_humidity_off_threshold
+    action:
+      # Turn on standalone
+      - service: humidifier.turn_on
+        target:
+          entity_id: humidifier.151732605035846_humidifier
+
+      # Notify
+      - service: notify.mobile_app_midnight
+        data:
+          title: "💨 Standalone On"
+          message: "AC cooled to floor but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
+
+      # Log
+      - service: system_log.write
+        data:
+          message: "Coordinated: AC off but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%, standalone activated"
+          level: warning
+    mode: single
+
+  # ============================================================================
+  # MANUAL OVERRIDE - Exit Humidity Mode
+  # ============================================================================
+  - id: coordinated_manual_override
+    alias: "Coordinated: Manual Override - Exit Humidity Mode"
+    description: "Exit humidity mode if someone manually changes temperature or turns off climate"
+    trigger:
+      # Temperature changed away from floor temp
+      - platform: template
+        value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float != states('input_number.coordinated_humidity_floor_temp') | float }}"
+      # Climate turned off
+      - platform: state
+        entity_id: climate.coordinated_thermostat
+        to: "off"
+    condition:
+      # Only if in humidity control mode
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_active
+        state: "on"
+    action:
+      # Mark humidity control as inactive
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_humidity_active
+
+      # Suppress re-entry until humidity drops below threshold
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.coordinated_humidity_suppressed
+
+      # Notify
+      - service: notify.mobile_app_midnight
+        data:
+          title: "⏸️ Humidity Paused"
+          message: "You changed settings. Humidity control paused until humidity drops below {{ states('input_number.coordinated_humidity_off_threshold') | int }}%."
+
+      # Log
+      - service: system_log.write
+        data:
+          message: "Coordinated: Manual override detected, humidity mode suppressed"
+          level: warning
+    mode: single
+
+  # ============================================================================
+  # CLEAR SUPPRESSION - Humidity Dropped
+  # ============================================================================
+  - id: coordinated_clear_suppression
+    alias: "Coordinated: Clear Suppression"
+    description: "Clear suppression when humidity drops below threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.max_indoor_humidity_sensor
+        below: input_number.coordinated_humidity_off_threshold
+    condition:
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_suppressed
+        state: "on"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_humidity_suppressed
+
+      # Notify
+      - service: notify.mobile_app_midnight
+        data:
+          title: "▶️ Humidity Ready"
+          message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Humidity control re-enabled."
+
+      # Log
+      - service: system_log.write
+        data:
+          message: "Coordinated: Humidity dropped, suppression cleared"
+          level: info
+    mode: single
+
+  # ============================================================================
+  # STARTUP SYNC - Fix Inconsistent State
+  # ============================================================================
+  - id: coordinated_startup_sync
+    alias: "Coordinated: Startup Sync"
+    description: "Sync state on Home Assistant startup"
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      # Wait for entities to be available
+      - wait_template: >
+          {{ states('sensor.max_indoor_humidity_sensor') not in ['unavailable', 'unknown'] and
+             states('input_boolean.coordinated_humidity_active') not in ['unavailable', 'unknown'] and
+             states('input_boolean.coordinated_humidity_suppressed') not in ['unavailable', 'unknown'] and
+             states('input_number.coordinated_humidity_off_threshold') not in ['unavailable', 'unknown'] }}
+        timeout:
+          minutes: 5
+
+      # If humidity_active is on but humidity is below threshold, exit humidity mode
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "on"
+          - condition: numeric_state
+            entity_id: sensor.max_indoor_humidity_sensor
+            below: input_number.coordinated_humidity_off_threshold
+        then:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.coordinated_humidity_active
+          - service: humidifier.turn_off
+            target:
+              entity_id: humidifier.151732605035846_humidifier
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: humidity_active was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold ({{ states('input_number.coordinated_humidity_off_threshold') }}%). Turned OFF humidity_active and standalone dehumidifier."
+              level: warning
+
+      # If suppressed but humidity is below threshold, clear suppression
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_suppressed
+            state: "on"
+          - condition: numeric_state
+            entity_id: sensor.max_indoor_humidity_sensor
+            below: input_number.coordinated_humidity_off_threshold
+        then:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.coordinated_humidity_suppressed
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold ({{ states('input_number.coordinated_humidity_off_threshold') }}%). Cleared suppression."
+              level: info
+
+      # Log startup complete with current state
+      - service: system_log.write
+        data:
+          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}"
+          level: info
+    mode: single
+
+# ==============================================================================
+# END OF PACKAGE
+# ==============================================================================
