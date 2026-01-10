@@ -337,6 +337,11 @@ automation:
         target:
           entity_id: input_boolean.coordinated_humidity_suppressed
 
+      # Turn off standalone if it was running
+      - service: humidifier.turn_off
+        target:
+          entity_id: humidifier.151732605035846_humidifier
+
       # Notify
       - service: notify.mobile_app_midnight
         data:
@@ -346,7 +351,7 @@ automation:
       # Log
       - service: system_log.write
         data:
-          message: "Coordinated: Humidity dropped, suppression cleared"
+          message: "Coordinated: Humidity dropped, suppression cleared, standalone turned off"
           level: info
     mode: single
 
