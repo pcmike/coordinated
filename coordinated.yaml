@@ -50,7 +50,7 @@
 #
 # ⚠️ IMPORTANT: You must edit entity IDs in TWO places:
 #   1. Below (input_text section) - for automations
-#   2. Climate section (line ~400) - for thermostat sensor
+#   2. Climate section (search for "generic_thermostat") - for thermostat sensor
 #
 # TIP: Find your entity IDs in Developer Tools → States
 #
@@ -226,7 +226,7 @@ input_number:
     step: 0.1
     initial: 0.5
     unit_of_measurement: "°F"
-    # ⚠️ Must match climate platform cold_tolerance (line ~405)
+    # ⚠️ Must match climate platform cold_tolerance (in generic_thermostat section)
     # How far below setpoint before thermostat turns off
     
   coordinated_warm_buffer:
@@ -416,7 +416,7 @@ climate:
     target_sensor: sensor.third_reality_inc_3rths24bz_temperature  # ⚠️ CUSTOMIZE: Your temp sensor
     ac_mode: true
     initial_hvac_mode: "cool"
-    cold_tolerance: 0.5  # ⚠️ MUST MATCH coordinated_cold_tolerance default (line ~185)
+    cold_tolerance: 0.5  # ⚠️ MUST MATCH coordinated_cold_tolerance default value above
     hot_tolerance: 1.5
     min_cycle_duration:
       minutes: 15
@@ -477,7 +477,7 @@ automation:
         target:
           entity_id: timer.coordinated_cooler_min_cycle
       
-      # Gather current conditions
+      # Gather current conditions including day/night floor calculation
       - variables:
           ac_state: "{{ states(states('input_text.coordinated_ac_switch')) }}"
           current_temp: "{{ states(states('input_text.coordinated_master_temp_sensor')) | float(75.0) }}"
@@ -486,13 +486,35 @@ automation:
           current_hum: "{{ states(states('input_text.coordinated_max_hum_sensor')) | float(49.0) }}"
           hum_target: "{{ states('input_number.coordinated_target_humidity') | float(49.0) }}"
           wet_tol: "{{ states('input_number.coordinated_wet_tolerance') | float(0.0) }}"
-          hum_demands: "{{ current_hum > (hum_target + wet_tol) }}"
-      
+          # Calculate day/night floor to determine if humidity can actually use AC
+          current_hour: "{{ now().hour }}"
+          day_start: "{{ states('input_number.coordinated_day_mode_start') | int(6) }}"
+          night_start: "{{ states('input_number.coordinated_night_mode_start') | int(21) }}"
+          is_night_mode: >
+            {% if night_start > day_start %}
+              {{ current_hour >= night_start or current_hour < day_start }}
+            {% else %}
+              {{ current_hour >= night_start and current_hour < day_start }}
+            {% endif %}
+          day_floor: "{{ states('input_number.coordinated_day_floor_temp') | float(70.0) }}"
+          cold_tol: "{{ states('input_number.coordinated_cold_tolerance') | float(0.5) }}"
+          warm_buf: "{{ states('input_number.coordinated_warm_buffer') | float(1.5) }}"
+          cool_buf: "{{ states('input_number.coordinated_cool_buffer') | float(0.5) }}"
+          hyst: "{{ states('input_number.coordinated_hysteresis') | float(0.2) }}"
+          thermostat_cutoff: "{{ temp_setpoint - cold_tol }}"
+          buffer: "{{ warm_buf if thermostat_cutoff >= 75 else cool_buf }}"
+          calculated_floor: "{{ thermostat_cutoff - buffer + hyst }}"
+          temp_floor: "{{ calculated_floor if is_night_mode else day_floor }}"
+          temp_allows_humidity: "{{ current_temp > temp_floor }}"
+          mode_name: "{{ 'NIGHT' if is_night_mode else 'DAY' }}"
+          # Humidity demands AC only if above target AND temp allows
+          hum_demands: "{{ current_hum > (hum_target + wet_tol) and temp_allows_humidity }}"
+
       - service: system_log.write
         data:
           message: >-
-            🔧 Startup: AC={{ ac_state }}, Temp={{ current_temp }}°F (demands={{ temp_demands }}), 
-            Humidity={{ current_hum }}% (demands={{ hum_demands }})
+            🔧 Startup: AC={{ ac_state }}, Temp={{ current_temp }}°F (demands={{ temp_demands }}),
+            Humidity={{ current_hum }}% (demands={{ hum_demands }}), {{ mode_name }} mode, floor={{ temp_floor }}°F
           level: warning
       
       # Determine actions based on AC state and conditions
@@ -625,12 +647,15 @@ automation:
   # ============================================================================
   # Detects when user manually controls AC and syncs logical state accordingly
   # Smart detection prevents false positives from automation-triggered changes
+  #
+  # ⚠️ NOTE: Trigger entity_id must be hardcoded (HA limitation - no templates in triggers)
+  # If you change coordinated_ac_switch, you MUST also update the trigger entity below!
   - id: sync_real_cooler_to_proxies
     alias: "Sync Real Cooler to Proxies"
     description: "Handle manual AC control overrides"
     trigger:
       - platform: state
-        entity_id: switch.meross_cool_switch
+        entity_id: switch.meross_cool_switch  # ⚠️ Must match coordinated_ac_switch
     condition:
       - condition: state
         entity_id: input_boolean.coordinated_system_enabled
@@ -701,16 +726,27 @@ automation:
     action:
       - variables:
           current_hum: "{{ states(states('input_text.coordinated_max_hum_sensor')) | float(50) }}"
+          current_temp: "{{ states(states('input_text.coordinated_master_temp_sensor')) | float(75) }}"
           critical_hum: "{{ states('input_number.coordinated_critical_humidity') | float(55) }}"
           is_critical: "{{ current_hum >= critical_hum }}"
+          current_hour: "{{ now().hour }}"
+          day_start: "{{ states('input_number.coordinated_day_mode_start') | int(6) }}"
+          night_start: "{{ states('input_number.coordinated_night_mode_start') | int(21) }}"
+          is_night_mode: >
+            {% if night_start > day_start %}
+              {{ current_hour >= night_start or current_hour < day_start }}
+            {% else %}
+              {{ current_hour >= night_start and current_hour < day_start }}
+            {% endif %}
+          mode_name: "{{ 'NIGHT' if is_night_mode else 'DAY' }}"
       - service: "{{ states('input_text.coordinated_notification_service') }}"
         data:
           title: "Indoor Humidity Control"
           message: >-
             {% if is_critical %}
-            🚨 CRITICAL humidity {{ current_hum | round(1) }}%! AC activated for emergency dehumidification.
+            🚨 CRITICAL humidity {{ current_hum | round(1) }}%! AC activated for emergency dehumidification ({{ mode_name }} mode).
             {% else %}
-            High humidity ({{ current_hum | round(1) }}%)! AC activated for dehumidification.
+            High humidity ({{ current_hum | round(1) }}%)! AC activated for dehumidification ({{ mode_name }} mode, {{ current_temp | round(1) }}°F).
             {% endif %}
     mode: single
 
@@ -736,10 +772,22 @@ automation:
           {% set dry_tol = states('input_number.coordinated_dry_tolerance') | float(3) %}
           {{ current <= (target - dry_tol) }}
     action:
+      - variables:
+          current_hum: "{{ states(states('input_text.coordinated_max_hum_sensor')) | float(50) }}"
+          current_hour: "{{ now().hour }}"
+          day_start: "{{ states('input_number.coordinated_day_mode_start') | int(6) }}"
+          night_start: "{{ states('input_number.coordinated_night_mode_start') | int(21) }}"
+          is_night_mode: >
+            {% if night_start > day_start %}
+              {{ current_hour >= night_start or current_hour < day_start }}
+            {% else %}
+              {{ current_hour >= night_start and current_hour < day_start }}
+            {% endif %}
+          mode_name: "{{ 'NIGHT' if is_night_mode else 'DAY' }}"
       - service: "{{ states('input_text.coordinated_notification_service') }}"
         data:
           title: "Indoor Humidity Control"
-          message: "Humidity normal ({{ states(states('input_text.coordinated_max_hum_sensor')) }}%)! AC dehumidification complete."
+          message: "Humidity normal ({{ current_hum | round(1) }}%)! AC dehumidification complete ({{ mode_name }} mode)."
     mode: single
 
   # ============================================================================
@@ -751,7 +799,7 @@ automation:
   #   - Uses calculated floor based on thermostat setpoint
   #   - Prevents AC from overcooling during sleep
   #
-  # DAY MODE: Permissive flat floor for safety
+  # DAY MODE: Permissive flat floor for aggressive dehumidification
   #   - Uses configurable flat floor (default 70°F)
   #   - Allows aggressive AC dehumidification
   #   - Handles shower/cooking humidity spikes quickly
@@ -961,26 +1009,49 @@ automation:
         state: "on"
     action:
       - variables:
+          # ===== HUMIDITY THRESHOLDS =====
           current_hum: "{{ states(states('input_text.coordinated_master_hum_sensor')) | float(49.0) }}"
           target_hum: "{{ states('input_number.coordinated_target_humidity') | float(49.0) }}"
           critical_hum: "{{ states('input_number.coordinated_critical_humidity') | float(55.0) }}"
           wet_tol: "{{ states('input_number.coordinated_wet_tolerance') | float(0.0) }}"
           dry_tol: "{{ states('input_number.coordinated_dry_tolerance') | float(3.0) }}"
-          standalone: "{{ states(states('input_text.coordinated_standalone_dehumidifier')) }}"
-          hum_req_on: "{{ is_state('input_boolean.coordinated_cooling_hum_request', 'on') }}"
-          temp_req_on: "{{ is_state('input_boolean.coordinated_cooling_temp_request', 'on') }}"
           is_critical: "{{ current_hum >= critical_hum }}"
-          
+
+          # ===== CALCULATE TEMP FLOOR (same logic as unified_humidity_control) =====
+          current_temp: "{{ states(states('input_text.coordinated_master_temp_sensor')) | float(75.0) }}"
+          current_hour: "{{ now().hour }}"
+          day_start: "{{ states('input_number.coordinated_day_mode_start') | int(6) }}"
+          night_start: "{{ states('input_number.coordinated_night_mode_start') | int(21) }}"
+          is_night_mode: >
+            {% if night_start > day_start %}
+              {{ current_hour >= night_start or current_hour < day_start }}
+            {% else %}
+              {{ current_hour >= night_start and current_hour < day_start }}
+            {% endif %}
+          day_floor: "{{ states('input_number.coordinated_day_floor_temp') | float(70.0) }}"
+          set_temp: "{{ state_attr('climate.coordinated_indoor_thermostat', 'temperature') | float(75.0) }}"
+          cold_tol: "{{ states('input_number.coordinated_cold_tolerance') | float(0.5) }}"
+          warm_buf: "{{ states('input_number.coordinated_warm_buffer') | float(1.5) }}"
+          cool_buf: "{{ states('input_number.coordinated_cool_buffer') | float(0.5) }}"
+          hyst: "{{ states('input_number.coordinated_hysteresis') | float(0.2) }}"
+          thermostat_cutoff: "{{ set_temp - cold_tol }}"
+          buffer: "{{ warm_buf if thermostat_cutoff >= 75 else cool_buf }}"
+          calculated_floor: "{{ thermostat_cutoff - buffer + hyst }}"
+          temp_floor: "{{ calculated_floor if is_night_mode else day_floor }}"
+          ac_can_help: "{{ current_temp > temp_floor }}"
+          mode_name: "{{ 'NIGHT' if is_night_mode else 'DAY' }}"
+
+          # ===== DEVICE STATE =====
+          standalone: "{{ states(states('input_text.coordinated_standalone_dehumidifier')) }}"
+          temp_req_on: "{{ is_state('input_boolean.coordinated_cooling_temp_request', 'on') }}"
+
           # Standalone should run if:
           # 1. Humidity exceeds target AND
-          # 2. (AC humidity request OFF OR critical humidity) AND
-          # 3. AC temp request OFF (not running for temp) AND
-          # 4. Not currently running
-          should_on: "{{ current_hum > (target_hum + wet_tol) and (not hum_req_on or is_critical) and not temp_req_on }}"
-          
-          # Standalone should stop if:
-          # 1. Humidity below target - dry_tolerance AND
-          # 2. Currently running
+          # 2. (AC can't help due to temp floor OR critical humidity) AND
+          # 3. AC temp request OFF (not already running for temp)
+          should_on: "{{ current_hum > (target_hum + wet_tol) and (not ac_can_help or is_critical) and not temp_req_on }}"
+
+          # Standalone should stop if humidity below target - dry_tolerance
           should_off: "{{ current_hum < (target_hum - dry_tol) }}"
       
       - choose:
@@ -996,16 +1067,19 @@ automation:
                 data:
                   title: "Standalone Dehumidifier"
                   message: >-
-                    {% if is_critical %}
-                    🚨 CRITICAL humidity {{ current_hum | round(1) }}%! Standalone activated (working with AC for maximum dehumidification).
+                    {% if is_critical and ac_can_help %}
+                    🚨 CRITICAL humidity {{ current_hum | round(1) }}%! Standalone + AC running together ({{ mode_name }} mode).
+                    {% elif is_critical and not ac_can_help %}
+                    🚨 CRITICAL humidity {{ current_hum | round(1) }}%! Standalone only - temp {{ current_temp | round(1) }}°F at floor ({{ mode_name }} mode).
                     {% else %}
-                    High humidity ({{ current_hum | round(1) }}%)! Standalone activated (AC too cold to help).
+                    High humidity ({{ current_hum | round(1) }}%)! Standalone activated - temp {{ current_temp | round(1) }}°F ≤ {{ temp_floor | round(1) }}°F floor ({{ mode_name }} mode).
                     {% endif %}
               - service: system_log.write
                 data:
                   message: >-
-                    🔧 Standalone ON: {{ current_hum | round(1) }}% > {{ (target_hum + wet_tol) | round(1) }}% 
-                    ({{ 'CRITICAL - dual device mode' if is_critical else 'AC disabled by temp floor' }})
+                    🔧 Standalone ON: {{ current_hum | round(1) }}% > {{ (target_hum + wet_tol) | round(1) }}%,
+                    temp {{ current_temp | round(1) }}°F {{ '>' if ac_can_help else '≤' }} floor {{ temp_floor | round(1) }}°F
+                    ({{ mode_name }} mode{{ ', CRITICAL - dual device' if is_critical else '' }})
                   level: warning
           
           # ===== TURN OFF STANDALONE =====
