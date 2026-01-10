@@ -1,0 +1,1122 @@
+# ==============================================================================
+# COORDINATED COOLER CONTROL PACKAGE v4.3
+# ==============================================================================
+#
+# DESCRIPTION:
+# This package intelligently coordinates a single AC unit between temperature 
+# and humidity control, with automatic fallback to a standalone dehumidifier 
+# when indoor temperatures are too cold for efficient AC-based dehumidification.
+#
+# KEY FEATURES:
+# - Dual control: Temperature OR humidity can activate AC (OR logic)
+# - Smart day/night temperature floor: Permissive during day, strict at night
+# - Critical humidity response: Both AC and standalone for humidity emergencies
+# - Standalone fallback: Uses portable dehumidifier when AC would overcool
+# - Anti-short-cycle: 15-minute minimum off time protects compressor
+# - Comprehensive logging: All actions logged at WARNING level for easy viewing
+# - Manual override detection: Respects manual AC control
+# - Startup sync: Recovers state correctly after HA restarts
+# - Emergency shutoff: Safety protection against dangerous overcooling
+#
+# VERSION 4.3 CHANGES:
+# - Day/night temperature floor modes
+# - Critical humidity threshold with dual-device response
+# - User-configurable day mode hours and floor temperature
+#
+# INSTALLATION:
+# 1. Copy this file to: /config/packages/coordinated.yaml
+# 2. Ensure configuration.yaml has: 
+#      homeassistant:
+#        packages: !include_dir_named packages
+# 3. Customize the USER CONFIGURATION section below with your entity IDs
+# 4. Restart Home Assistant
+# 5. Add entities to your dashboard (see README.md)
+#
+# REQUIREMENTS:
+# - One temperature sensor (bedroom/priority area)
+# - One or two humidity sensors (max for hotspots, master for standalone)
+# - Existing switch that controls AC (your switch.meross_cool_switch)
+# - One standalone dehumidifier with humidifier platform support
+# - Mobile app for notifications (optional but recommended)
+#
+# SUPPORT:
+# See README.md for detailed documentation, troubleshooting, and examples.
+#
+# ==============================================================================
+
+# ==============================================================================
+# USER CONFIGURATION - CUSTOMIZE THESE VALUES
+# ==============================================================================
+#
+# ⚠️ IMPORTANT: You must edit entity IDs in TWO places:
+#   1. Below (input_text section) - for automations
+#   2. Climate section (line ~400) - for thermostat sensor
+#
+# TIP: Find your entity IDs in Developer Tools → States
+#
+input_text:
+  # ============================================================================
+  # SENSOR CONFIGURATION
+  # ============================================================================
+  coordinated_master_temp_sensor:
+    name: "Master Temperature Sensor"
+    initial: "sensor.third_reality_inc_3rths24bz_temperature"
+    # Your primary temperature sensor (bedroom or main living area)
+    # Used by: Unified humidity control automation (temp floor calculation)
+    # NOTE: Must also be set in climate section (line ~400)
+    
+  coordinated_master_hum_sensor:
+    name: "Master Humidity Sensor"
+    initial: "sensor.third_reality_inc_3rths24bz_humidity"
+    # Your primary humidity sensor (bedroom or priority area)
+    # Used by: Standalone dehumidifier fallback automation
+    
+  coordinated_max_hum_sensor:
+    name: "Max Indoor Humidity Sensor"
+    initial: "sensor.max_indoor_humidity_sensor"
+    # Humidity sensor that catches hotspots (MAX of multiple sensors)
+    # Used by: AC-based dehumidification trigger
+    # Can be same as master_hum_sensor if you only have one sensor
+  
+  # ============================================================================
+  # DEVICE CONFIGURATION
+  # ============================================================================
+  coordinated_ac_switch:
+    name: "AC Switch Entity"
+    initial: "switch.meross_cool_switch"
+    # Your existing switch that controls AC (can be switch template or direct switch)
+    
+  coordinated_standalone_dehumidifier:
+    name: "Standalone Dehumidifier Entity"
+    initial: "humidifier.151732605035846_humidifier"
+    # Your standalone/portable dehumidifier
+    # Must support humidifier.turn_on and humidifier.turn_off services
+  
+  # ============================================================================
+  # NOTIFICATION CONFIGURATION
+  # ============================================================================
+  coordinated_notification_service:
+    name: "Notification Service"
+    initial: "notify.mobile_app_midnight"
+    # Mobile app notification service (change to your device name)
+    # Format: notify.mobile_app_YOUR_DEVICE_NAME
+    # Leave as-is if you don't want notifications (automations will skip)
+
+# ==============================================================================
+# HUMIDITY CONTROL SETTINGS & TEMPERATURE FLOOR TUNING
+# ==============================================================================
+# Target humidity + tolerances + temperature floor calculation parameters
+input_number:
+  # ============================================================================
+  # HUMIDITY TARGET & TOLERANCES
+  # ============================================================================
+  coordinated_target_humidity:
+    name: "Target Humidity"
+    min: 30
+    max: 70
+    step: 1
+    initial: 49
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+    # Desired indoor humidity level
+    # AC/Standalone turn ON when humidity exceeds this value
+    # AC/Standalone turn OFF when humidity drops to (target - 3%)
+    # Example: 49% target → Turns on at 49%, turns off at 46%
+  
+  coordinated_wet_tolerance:
+    name: "Humidity Wet Tolerance"
+    min: 0
+    max: 5
+    step: 0.5
+    initial: 0
+    unit_of_measurement: "%"
+    # How far above target before turning ON
+    # 0 = turn on immediately at target
+    
+  coordinated_dry_tolerance:
+    name: "Humidity Dry Tolerance"
+    min: 1
+    max: 10
+    step: 0.5
+    initial: 3
+    unit_of_measurement: "%"
+    # How far below target before turning OFF
+    # 3 = turn off at target - 3% (e.g., 49% → turn off at 46%)
+  
+  # ============================================================================
+  # CRITICAL HUMIDITY RESPONSE (NEW IN v4.3)
+  # ============================================================================
+  coordinated_critical_humidity:
+    name: "Critical Humidity Threshold"
+    min: 50
+    max: 70
+    step: 1
+    initial: 55
+    unit_of_measurement: "%"
+    icon: mdi:alert-circle
+    # EMERGENCY humidity level - activates maximum dehumidification
+    # Above this level:
+    #   - AC runs if temp allows (ignores normal restrictions in critical situations)
+    #   - Standalone ALWAYS runs (even if AC is already running)
+    #   - Both devices work together for fastest humidity removal
+    # Use cases: Post-shower spikes, cooking steam, humidity emergencies
+    # Recommended: 55% (aggressive), 60% (moderate), 65% (conservative)
+  
+  # ============================================================================
+  # DAY/NIGHT MODE CONFIGURATION (NEW IN v4.3)
+  # ============================================================================
+  coordinated_day_mode_start:
+    name: "Day Mode Start Hour"
+    min: 0
+    max: 23
+    step: 1
+    initial: 6
+    unit_of_measurement: "hour"
+    icon: mdi:weather-sunny
+    # Hour when day mode begins (0-23, 24-hour format)
+    # Day mode uses permissive 70°F floor for aggressive dehumidification
+    # Example: 6 = 6:00 AM
+  
+  coordinated_night_mode_start:
+    name: "Night Mode Start Hour"
+    min: 0
+    max: 23
+    step: 1
+    initial: 21
+    unit_of_measurement: "hour"
+    icon: mdi:weather-night
+    # Hour when night mode begins (0-23, 24-hour format)
+    # Night mode uses calculated floor based on thermostat for comfort
+    # Example: 21 = 9:00 PM
+  
+  coordinated_day_floor_temp:
+    name: "Day Mode Floor Temperature"
+    min: 65
+    max: 75
+    step: 0.5
+    initial: 70
+    unit_of_measurement: "°F"
+    icon: mdi:sun-thermometer
+    # Flat temperature floor used during day mode
+    # AC can dehumidify down to this temperature during the day
+    # Lower = more aggressive dehumidification (may be uncomfortable)
+    # Higher = less dehumidification power (may not clear humidity fast enough)
+    # Recommended: 70°F (allows aggressive response without excessive cooling)
+  
+  # ============================================================================
+  # NIGHT MODE TEMPERATURE FLOOR TUNING (ADVANCED)
+  # ============================================================================
+  # These values control temperature floor calculation during NIGHT mode only.
+  # Day mode uses the flat floor temperature above.
+  #
+  # Night mode formula:
+  #   min_temp = (thermostat_setpoint - cold_tolerance) - buffer + hysteresis
+  #   
+  #   If thermostat_cutoff ≥75°F: buffer = warm_buffer (1.5°F)
+  #   If thermostat_cutoff <75°F:  buffer = cool_buffer (0.5°F)
+  #
+  # Examples with defaults (NIGHT MODE ONLY):
+  #   Setpoint 76°F:   Floor = 74.2°F (AC can dehumidify down to ~74°F)
+  #   Setpoint 73°F: Floor = 72.2°F (AC can dehumidify down to ~72°F)
+  
+  coordinated_cold_tolerance:
+    name: "Thermostat Cold Tolerance"
+    min: 0.3
+    max: 2.0
+    step: 0.1
+    initial: 0.5
+    unit_of_measurement: "°F"
+    # ⚠️ Must match climate platform cold_tolerance (line ~405)
+    # How far below setpoint before thermostat turns off
+    
+  coordinated_warm_buffer:
+    name: "Warm Temp Buffer (Night)"
+    min: 0.5
+    max: 3.0
+    step: 0.1
+    initial: 1.5
+    unit_of_measurement: "°F"
+    # Extra cooling allowed when warm (≥75°F cutoff) during night mode
+    # Larger = more dehumidification headroom
+    
+  coordinated_cool_buffer:
+    name: "Cool Temp Buffer (Night)"
+    min: 0.3
+    max: 2.0
+    step: 0.1
+    initial: 0.5
+    unit_of_measurement: "°F"
+    # Extra cooling allowed when cool (<75°F cutoff) during night mode
+    # Smaller = less overcooling
+    
+  coordinated_hysteresis:
+    name: "Temperature Hysteresis"
+    min: 0.1
+    max: 1.0
+    step: 0.1
+    initial: 0.2
+    unit_of_measurement: "°F"
+    # Prevents rapid on/off at threshold edge
+  
+  # ============================================================================
+  # EMERGENCY SHUTOFF THRESHOLD
+  # ============================================================================
+  coordinated_emergency_temp:
+    name: "Emergency Shutoff Temperature"
+    min: 60
+    max: 70
+    step: 0.5
+    initial: 66
+    unit_of_measurement: "°F"
+    # If temperature drops below this for 2+ minutes, system emergency stops
+    # Safety protection against dangerous overcooling
+    # Recommended: Set at least 6°F below typical indoor temp
+
+# ==============================================================================
+# END OF USER CONFIGURATION
+# ==============================================================================
+# Do not edit below this line unless you know what you're doing
+# ==============================================================================
+
+# ==============================================================================
+# ENTITY CUSTOMIZATION - UI Improvements
+# ==============================================================================
+homeassistant:
+  customize:
+    input_boolean.coordinated_cooling_temp_request:
+      icon: mdi:thermometer
+      friendly_name: "Temperature Demand"
+    input_boolean.coordinated_cooling_hum_request:
+      icon: mdi:water-percent
+      friendly_name: "Humidity Demand"
+    input_boolean.coordinated_system_enabled:
+      icon: mdi:toggle-switch
+      friendly_name: "System Master Switch"
+    switch.coordinated_cooler_switch:
+      icon: mdi:air-conditioner
+      friendly_name: "AC Control"
+    timer.coordinated_cooler_min_cycle:
+      icon: mdi:timer-sand
+      friendly_name: "AC Cycle Lockout"
+    input_number.coordinated_target_humidity:
+      icon: mdi:water-percent
+      friendly_name: "Target Humidity"
+    input_number.coordinated_critical_humidity:
+      icon: mdi:alert-circle
+      friendly_name: "Critical Humidity"
+    input_number.coordinated_emergency_temp:
+      icon: mdi:alert-octagon
+      friendly_name: "Emergency Shutoff Temp"
+    input_number.coordinated_day_floor_temp:
+      icon: mdi:sun-thermometer
+      friendly_name: "Day Floor Temp"
+
+# ==============================================================================
+# INTERNAL STATE - Logical Request Flags
+# ==============================================================================
+# These booleans represent "demands" from temperature and humidity controllers
+input_boolean:
+  coordinated_cooling_temp_request:
+    name: "Cooling Temp Request"
+    initial: off
+    # ON = Temperature demands cooling (too hot)
+    # OFF = Temperature satisfied
+    
+  coordinated_cooling_hum_request:
+    name: "Cooling Humidity Request"
+    initial: off
+    # ON = Humidity demands cooling/dehumidification (too humid)
+    # OFF = Humidity satisfied
+    
+  coordinated_system_enabled:
+    name: "Coordinated System Enabled"
+    initial: on
+    icon: mdi:toggle-switch
+    # Master on/off switch for entire coordinated system
+    # Turn OFF to disable all automations (for maintenance)
+
+# ==============================================================================
+# TEMPLATE SWITCHES - Proxy Interface Layer
+# ==============================================================================
+# These switches connect the generic thermostat to the logical request booleans
+template:
+  - switch:
+      # Temperature proxy - controlled by generic thermostat
+      - name: "Coordinated Temp Proxy Switch"
+        unique_id: coordinated_temp_proxy_switch
+        state: "{{ 'on' if is_state('input_boolean.coordinated_cooling_temp_request', 'on') else 'off' }}"
+        turn_on:
+          service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.coordinated_cooling_temp_request
+        turn_off:
+          service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.coordinated_cooling_temp_request
+        availability: "{{ states('input_boolean.coordinated_cooling_temp_request') not in ['unknown', 'unavailable'] }}"
+
+      # Humidity proxy - NOT used by any integration, kept for compatibility/manual control
+      - name: "Coordinated Hum Proxy Switch"
+        unique_id: coordinated_hum_proxy_switch
+        state: "{{ 'on' if is_state('input_boolean.coordinated_cooling_hum_request', 'on') else 'off' }}"
+        turn_on:
+          service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.coordinated_cooling_hum_request
+        turn_off:
+          service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.coordinated_cooling_hum_request
+        availability: "{{ states('input_boolean.coordinated_cooling_hum_request') not in ['unknown', 'unavailable'] }}"
+
+      # Physical cooler mirror - UI-friendly switch that mirrors real AC switch state
+      # Provides single control point in dashboards
+      - name: "Coordinated Cooler Switch"
+        unique_id: coordinated_cooler_switch
+        state: "{{ states(states('input_text.coordinated_ac_switch')) }}"
+        turn_on:
+          service: switch.turn_on
+          target:
+            entity_id: "{{ states('input_text.coordinated_ac_switch') }}"
+        turn_off:
+          service: switch.turn_off
+          target:
+            entity_id: "{{ states('input_text.coordinated_ac_switch') }}"
+        icon: mdi:air-conditioner
+        availability: >
+          {{ states('input_boolean.coordinated_cooling_temp_request') not in ['unknown', 'unavailable'] and
+             states('input_boolean.coordinated_cooling_hum_request') not in ['unknown', 'unavailable'] and
+             states(states('input_text.coordinated_ac_switch')) not in ['unknown', 'unavailable'] }}
+
+# ==============================================================================
+# MINIMUM CYCLE TIMER
+# ==============================================================================
+# Prevents compressor damage by enforcing 15-minute minimum off time
+timer:
+  coordinated_cooler_min_cycle:
+    duration: "00:15:00"
+    # AC cannot turn back on until this timer expires
+    # Protects compressor from short-cycling
+
+# ==============================================================================
+# GENERIC THERMOSTAT - Temperature Control
+# ==============================================================================
+# ⚠️ CUSTOMIZE HERE: Replace entity IDs below with your sensors
+# 
+# target_sensor: Your main temperature sensor (must be actual entity ID, no templates)
+# cold_tolerance: Must match input_number.coordinated_cold_tolerance default value
+# 
+# NOTE: Changing these requires a Home Assistant restart
+# ==============================================================================
+climate:
+  - platform: generic_thermostat
+    unique_id: coordinated_indoor_thermostat
+    name: "Coordinated Indoor Thermostat"
+    heater: switch.coordinated_temp_proxy_switch
+    target_sensor: sensor.third_reality_inc_3rths24bz_temperature  # ⚠️ CUSTOMIZE: Your temp sensor
+    ac_mode: true
+    initial_hvac_mode: "cool"
+    cold_tolerance: 0.5  # ⚠️ MUST MATCH coordinated_cold_tolerance default (line ~185)
+    hot_tolerance: 1.5
+    min_cycle_duration:
+      minutes: 15
+    min_temp: 60
+    max_temp: 85
+    # Preset temperatures (optional, can be changed via UI)
+    home_temp: 75
+    sleep_temp: 73
+    away_temp: 78
+    keep_alive:
+      minutes: 2
+
+# ==============================================================================
+# AUTOMATIONS - Core System Logic
+# ==============================================================================
+automation:
+  # ============================================================================
+  # STARTUP SYNC - Post-Restart State Recovery
+  # ============================================================================
+  # Runs once after HA restart to sync logical state with physical AC state
+  # Prevents drift by "reclaiming" the appropriate driver based on conditions
+  - id: initial_sync_coordinated_cooler
+    alias: "Initial Sync Coordinated Cooler"
+    description: "Recover coordinated state after HA restart"
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      # Wait for all critical entities to load (max 5 minutes)
+      - wait_template: >
+          {{ states(states('input_text.coordinated_master_temp_sensor')) not in ['unknown', 'unavailable'] and
+             states(states('input_text.coordinated_ac_switch')) not in ['unknown', 'unavailable'] and
+             states(states('input_text.coordinated_max_hum_sensor')) not in ['unknown', 'unavailable'] }}
+        timeout: "00:05:00"
+        continue_on_timeout: true
+      
+      # Log startup status
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ wait.completed }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  message: "🔧 Coordinated System: All sensors loaded successfully"
+                  level: warning
+          - conditions:
+              - condition: template
+                value_template: "{{ not wait.completed }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  message: "⚠️ Coordinated System: Sensor timeout after 5min - check sensor availability"
+                  level: warning
+      
+      # Reset timer from previous session
+      - service: timer.cancel
+        target:
+          entity_id: timer.coordinated_cooler_min_cycle
+      
+      # Gather current conditions
+      - variables:
+          ac_state: "{{ states(states('input_text.coordinated_ac_switch')) }}"
+          current_temp: "{{ states(states('input_text.coordinated_master_temp_sensor')) | float(75.0) }}"
+          temp_setpoint: "{{ state_attr('climate.coordinated_indoor_thermostat', 'temperature') | float(75.0) }}"
+          temp_demands: "{{ current_temp > (temp_setpoint + 1.5) }}"
+          current_hum: "{{ states(states('input_text.coordinated_max_hum_sensor')) | float(49.0) }}"
+          hum_target: "{{ states('input_number.coordinated_target_humidity') | float(49.0) }}"
+          wet_tol: "{{ states('input_number.coordinated_wet_tolerance') | float(0.0) }}"
+          hum_demands: "{{ current_hum > (hum_target + wet_tol) }}"
+      
+      - service: system_log.write
+        data:
+          message: >-
+            🔧 Startup: AC={{ ac_state }}, Temp={{ current_temp }}°F (demands={{ temp_demands }}), 
+            Humidity={{ current_hum }}% (demands={{ hum_demands }})
+          level: warning
+      
+      # Determine actions based on AC state and conditions
+      - choose:
+          # AC is ON - figure out which driver should claim it
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_state == 'on' }}"
+            sequence:
+              - choose:
+                  # Temp is demanding - activate temp request
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ temp_demands }}"
+                    sequence:
+                      - service: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.coordinated_cooling_temp_request
+                      - service: system_log.write
+                        data:
+                          message: "✅ Startup: Reclaimed by temperature control"
+                          level: warning
+                  
+                  # Humidity is demanding - activate humidity request
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ hum_demands }}"
+                    sequence:
+                      - service: input_boolean.turn_on
+                        target:
+                          entity_id: input_boolean.coordinated_cooling_hum_request
+                      - service: system_log.write
+                        data:
+                          message: "✅ Startup: Reclaimed by humidity control"
+                          level: warning
+                  
+                  # Neither demanding - turn AC off
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ not temp_demands and not hum_demands }}"
+                    sequence:
+                      - service: switch.turn_off
+                        target:
+                          entity_id: switch.coordinated_cooler_switch
+                      - service: timer.start
+                        target:
+                          entity_id: timer.coordinated_cooler_min_cycle
+                      - service: system_log.write
+                        data:
+                          message: "🔧 Startup: AC turned off (no demands), timer started"
+                          level: warning
+          
+          # AC is OFF - nothing to reclaim
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_state == 'off' }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  message: "✅ Startup: AC off - no action needed"
+                  level: warning
+    mode: single
+
+  # ============================================================================
+  # CORE COORDINATOR - OR/AND Logic
+  # ============================================================================
+  # Implements the coordination logic:
+  #   AC turns ON when: temp_request OR hum_request (either demands)
+  #   AC turns OFF when: NOT temp_request AND NOT hum_request (both satisfied)
+  # Also enforces minimum cycle timer to prevent short-cycling
+  - id: invoke_coordinated_cooler_actions
+    alias: "Invoke Coordinated Cooler on Proxy Changes"
+    description: "Control AC based on OR of temperature and humidity requests"
+    trigger:
+      # Triggers whenever either request changes state
+      - platform: state
+        entity_id:
+          - input_boolean.coordinated_cooling_temp_request
+          - input_boolean.coordinated_cooling_hum_request
+    condition:
+      # Only act if system is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_system_enabled
+        state: "on"
+    action:
+      - variables:
+          # OR logic: AC should be on if EITHER request is on
+          should_be_on: "{{ is_state('input_boolean.coordinated_cooling_temp_request', 'on') or 
+                            is_state('input_boolean.coordinated_cooling_hum_request', 'on') }}"
+          ac_state: "{{ states(states('input_text.coordinated_ac_switch')) }}"
+          temp_req: "{{ states('input_boolean.coordinated_cooling_temp_request') }}"
+          hum_req: "{{ states('input_boolean.coordinated_cooling_hum_request') }}"
+      
+      - choose:
+          # Turn AC ON - either request is demanding and AC is currently off
+          - conditions:
+              - condition: template
+                value_template: "{{ should_be_on and ac_state in ['off', 'unknown'] }}"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.coordinated_cooler_switch
+              - service: system_log.write
+                data:
+                  message: "❄️ AC turned ON (temp={{ temp_req }}, hum={{ hum_req }})"
+                  level: warning
+          
+          # Turn AC OFF - both requests satisfied, AC is on, and timer allows
+          - conditions:
+              - condition: template
+                value_template: "{{ not should_be_on and ac_state == 'on' }}"
+              - condition: state
+                entity_id: timer.coordinated_cooler_min_cycle
+                state: idle
+            sequence:
+              - service: switch.turn_off
+                target:
+                  entity_id: switch.coordinated_cooler_switch
+              - service: timer.start
+                target:
+                  entity_id: timer.coordinated_cooler_min_cycle
+              - service: system_log.write
+                data:
+                  message: "🔌 AC turned OFF (both requests satisfied), 15-min timer started"
+                  level: warning
+    mode: queued
+
+  # ============================================================================
+  # BIDIRECTIONAL SYNC - Manual Override Detection
+  # ============================================================================
+  # Detects when user manually controls AC and syncs logical state accordingly
+  # Smart detection prevents false positives from automation-triggered changes
+  - id: sync_real_cooler_to_proxies
+    alias: "Sync Real Cooler to Proxies"
+    description: "Handle manual AC control overrides"
+    trigger:
+      - platform: state
+        entity_id: switch.meross_cool_switch
+    condition:
+      - condition: state
+        entity_id: input_boolean.coordinated_system_enabled
+        state: "on"
+    action:
+      - variables:
+          temp_req_on: "{{ is_state('input_boolean.coordinated_cooling_temp_request', 'on') }}"
+          hum_req_on: "{{ is_state('input_boolean.coordinated_cooling_hum_request', 'on') }}"
+          any_req_on: "{{ temp_req_on or hum_req_on }}"
+          ac_state: "{{ states(states('input_text.coordinated_ac_switch')) }}"
+      
+      - choose:
+          # Manual ON detected - both requests were off (true manual action)
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_state == 'on' and not temp_req_on and not hum_req_on }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id:
+                    - input_boolean.coordinated_cooling_temp_request
+                    - input_boolean.coordinated_cooling_hum_request
+              - service: system_log.write
+                data:
+                  message: "👤 Manual override: AC turned ON, both requests activated"
+                  level: warning
+          
+          # Manual OFF detected - at least one request was on (manual override)
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_state == 'off' and any_req_on }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id:
+                    - input_boolean.coordinated_cooling_temp_request
+                    - input_boolean.coordinated_cooling_hum_request
+              - service: timer.start
+                target:
+                  entity_id: timer.coordinated_cooler_min_cycle
+              - service: system_log.write
+                data:
+                  message: "👤 Manual override: AC turned OFF, both requests deactivated, timer started"
+                  level: warning
+    mode: single
+
+  # ============================================================================
+  # NOTIFICATIONS - User Alerts
+  # ============================================================================
+  # Notify when humidity control takes over AC or releases it
+  
+  # Alert when AC activates for dehumidification only
+  - id: notify_high_humidity_on
+    alias: "Notify High Humidity - Cooler On"
+    description: "Alert when AC activates due to high humidity (not temperature)"
+    trigger:
+      - platform: state
+        entity_id: input_boolean.coordinated_cooling_hum_request
+        to: "on"
+    condition:
+      # Only notify if temp isn't demanding (humidity is sole driver)
+      - condition: state
+        entity_id: input_boolean.coordinated_cooling_temp_request
+        state: "off"
+      # AC was recently off (not just continuing to run)
+      - condition: template
+        value_template: "{{ states(states('input_text.coordinated_ac_switch')) == 'off' }}"
+    action:
+      - variables:
+          current_hum: "{{ states(states('input_text.coordinated_max_hum_sensor')) | float(50) }}"
+          critical_hum: "{{ states('input_number.coordinated_critical_humidity') | float(55) }}"
+          is_critical: "{{ current_hum >= critical_hum }}"
+      - service: "{{ states('input_text.coordinated_notification_service') }}"
+        data:
+          title: "Indoor Humidity Control"
+          message: >-
+            {% if is_critical %}
+            🚨 CRITICAL humidity {{ current_hum | round(1) }}%! AC activated for emergency dehumidification.
+            {% else %}
+            High humidity ({{ current_hum | round(1) }}%)! AC activated for dehumidification.
+            {% endif %}
+    mode: single
+
+  # Alert when humidity normalizes and AC stops
+  - id: notify_humidity_normal_off
+    alias: "Notify Humidity Normal - Cooler Off"
+    description: "Alert when humidity returns to normal and AC turns off"
+    trigger:
+      - platform: state
+        entity_id: input_boolean.coordinated_cooling_hum_request
+        from: "on"
+        to: "off"
+    condition:
+      # Only notify if temp isn't demanding (humidity was sole driver)
+      - condition: state
+        entity_id: input_boolean.coordinated_cooling_temp_request
+        state: "off"
+      # Verify humidity is actually below target - dry_tolerance
+      - condition: template
+        value_template: >-
+          {% set current = states(states('input_text.coordinated_max_hum_sensor')) | float(100) %}
+          {% set target = states('input_number.coordinated_target_humidity') | float(49) %}
+          {% set dry_tol = states('input_number.coordinated_dry_tolerance') | float(3) %}
+          {{ current <= (target - dry_tol) }}
+    action:
+      - service: "{{ states('input_text.coordinated_notification_service') }}"
+        data:
+          title: "Indoor Humidity Control"
+          message: "Humidity normal ({{ states(states('input_text.coordinated_max_hum_sensor')) }}%)! AC dehumidification complete."
+    mode: single
+
+  # ============================================================================
+  # UNIFIED HUMIDITY CONTROL - Smart Day/Night Temperature Floor
+  # ============================================================================
+  # Enhanced version with day/night floor logic and critical humidity response
+  #
+  # NIGHT MODE: Strict temperature floor for comfort
+  #   - Uses calculated floor based on thermostat setpoint
+  #   - Prevents AC from overcooling during sleep
+  #
+  # DAY MODE: Permissive flat floor for safety
+  #   - Uses configurable flat floor (default 70°F)
+  #   - Allows aggressive AC dehumidification
+  #   - Handles shower/cooking humidity spikes quickly
+  #
+  # CRITICAL HUMIDITY MODE: Above threshold (configurable, default 55%)
+  #   - AC runs if temp allows
+  #   - Standalone ALWAYS runs regardless of AC state
+  #   - Prevents mold growth from large humidity spikes
+  - id: unified_humidity_control_with_temp_floor
+    alias: "Unified Humidity Control with Smart Temp Floor"
+    description: "Direct humidity control with day/night floor logic and critical response"
+    trigger:
+      # Humidity sensor changes
+      - platform: state
+        entity_id: sensor.max_indoor_humidity_sensor
+      # Temperature changes (affects floor calculation)
+      - platform: state
+        entity_id: sensor.third_reality_inc_3rths24bz_temperature
+      # Thermostat setpoint changes
+      - platform: state
+        entity_id: climate.coordinated_indoor_thermostat
+        attribute: temperature
+      # Target humidity changes
+      - platform: state
+        entity_id: input_number.coordinated_target_humidity
+      # Critical threshold changes
+      - platform: state
+        entity_id: input_number.coordinated_critical_humidity
+      # Day/night mode configuration changes
+      - platform: state
+        entity_id:
+          - input_number.coordinated_day_mode_start
+          - input_number.coordinated_night_mode_start
+          - input_number.coordinated_day_floor_temp
+      # Tolerance changes
+      - platform: state
+        entity_id:
+          - input_number.coordinated_wet_tolerance
+          - input_number.coordinated_dry_tolerance
+          - input_number.coordinated_cold_tolerance
+          - input_number.coordinated_warm_buffer
+          - input_number.coordinated_cool_buffer
+          - input_number.coordinated_hysteresis
+      # Hourly check (for mode transitions)
+      - platform: time_pattern
+        minutes: 0
+      # Startup
+      - platform: homeassistant
+        event: start
+    condition:
+      # Only act if system is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_system_enabled
+        state: "on"
+    action:
+      - variables:
+          # ===== HUMIDITY THRESHOLDS =====
+          current_hum: "{{ states(states('input_text.coordinated_max_hum_sensor')) | float(49.0) }}"
+          target_hum: "{{ states('input_number.coordinated_target_humidity') | float(49.0) }}"
+          critical_hum: "{{ states('input_number.coordinated_critical_humidity') | float(55.0) }}"
+          wet_tol: "{{ states('input_number.coordinated_wet_tolerance') | float(0.0) }}"
+          dry_tol: "{{ states('input_number.coordinated_dry_tolerance') | float(3.0) }}"
+          wet_threshold: "{{ target_hum + wet_tol }}"
+          dry_threshold: "{{ target_hum - dry_tol }}"
+          is_critical: "{{ current_hum >= critical_hum }}"
+          
+          # ===== TIME-BASED FLOOR SELECTION =====
+          current_hour: "{{ now().hour }}"
+          day_start: "{{ states('input_number.coordinated_day_mode_start') | int(6) }}"
+          night_start: "{{ states('input_number.coordinated_night_mode_start') | int(21) }}"
+          is_night_mode: >
+            {% if night_start > day_start %}
+              {{ current_hour >= night_start or current_hour < day_start }}
+            {% else %}
+              {{ current_hour >= night_start and current_hour < day_start }}
+            {% endif %}
+          
+          # ===== TEMPERATURE FLOOR CALCULATION =====
+          current_temp: "{{ states(states('input_text.coordinated_master_temp_sensor')) | float(75.0) }}"
+          set_temp: "{{ state_attr('climate.coordinated_indoor_thermostat', 'temperature') | float(75.0) }}"
+          cold_tol: "{{ states('input_number.coordinated_cold_tolerance') | float(0.5) }}"
+          warm_buf: "{{ states('input_number.coordinated_warm_buffer') | float(1.5) }}"
+          cool_buf: "{{ states('input_number.coordinated_cool_buffer') | float(0.5) }}"
+          hyst: "{{ states('input_number.coordinated_hysteresis') | float(0.2) }}"
+          
+          # Night mode: Use calculated floor based on setpoint
+          thermostat_cutoff: "{{ set_temp - cold_tol }}"
+          buffer: "{{ warm_buf if thermostat_cutoff >= 75 else cool_buf }}"
+          calculated_floor: "{{ thermostat_cutoff - buffer + hyst }}"
+          
+          # Day mode: Use configurable flat floor
+          day_floor: "{{ states('input_number.coordinated_day_floor_temp') | float(70.0) }}"
+          
+          # Select floor based on time
+          min_temp: "{{ calculated_floor if is_night_mode else day_floor }}"
+          temp_allows: "{{ current_temp > min_temp }}"
+          
+          # ===== CURRENT STATE =====
+          hum_req_on: "{{ is_state('input_boolean.coordinated_cooling_hum_request', 'on') }}"
+      
+      - choose:
+          # ===== SCENARIO 1: TURN ON =====
+          # Humidity exceeds wet threshold AND temp allows AND not already on
+          - conditions:
+              - condition: template
+                value_template: "{{ current_hum > wet_threshold and temp_allows and not hum_req_on }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.coordinated_cooling_hum_request
+              - service: system_log.write
+                data:
+                  message: >-
+                    💧 Humidity ON: {{ current_hum | round(1) }}% > {{ wet_threshold | round(1) }}%, 
+                    temp {{ current_temp | round(1) }}°F > floor {{ min_temp | round(1) }}°F 
+                    ({{ 'NIGHT' if is_night_mode else 'DAY' }} mode{{ ', CRITICAL' if is_critical else '' }})
+                  level: warning
+          
+          # ===== SCENARIO 2: TURN OFF (Humidity Satisfied) =====
+          # Humidity below dry threshold AND currently on
+          - conditions:
+              - condition: template
+                value_template: "{{ current_hum < dry_threshold and hum_req_on }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.coordinated_cooling_hum_request
+              - service: system_log.write
+                data:
+                  message: "💧 Humidity OFF: {{ current_hum | round(1) }}% < {{ dry_threshold | round(1) }}% (satisfied)"
+                  level: warning
+          
+          # ===== SCENARIO 3: FORCE OFF (Temp Too Cold) =====
+          # Temperature below floor AND currently on AND NOT critical
+          - conditions:
+              - condition: template
+                value_template: "{{ not temp_allows and hum_req_on and not is_critical }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.coordinated_cooling_hum_request
+              - service: system_log.write
+                data:
+                  message: >-
+                    🌡️ Humidity OFF: Temp {{ current_temp | round(1) }}°F ≤ floor {{ min_temp | round(1) }}°F 
+                    (too cold for AC dehumid, {{ 'NIGHT' if is_night_mode else 'DAY' }} mode)
+                  level: warning
+          
+          # ===== SCENARIO 4: CRITICAL OVERRIDE (Keep AC on despite cold temp) =====
+          # Critical humidity AND temp below floor BUT still within reasonable range
+          # Only override if temp is above absolute minimum (emergency shutoff - 4°F buffer)
+          - conditions:
+              - condition: template
+                value_template: >
+                  {% set emergency_temp = states('input_number.coordinated_emergency_temp') | float(66) %}
+                  {% set safe_override = current_temp > (emergency_temp + 4) %}
+                  {{ is_critical and not temp_allows and not hum_req_on and safe_override }}
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.coordinated_cooling_hum_request
+              - service: system_log.write
+                data:
+                  message: >-
+                    🚨 CRITICAL HUMIDITY OVERRIDE: {{ current_hum | round(1) }}% ≥ {{ critical_hum | round(1) }}% 
+                    - AC forced ON despite temp {{ current_temp | round(1) }}°F ≤ floor {{ min_temp | round(1) }}°F
+                  level: warning
+    mode: restart
+
+  # ============================================================================
+  # STANDALONE DEHUMIDIFIER FALLBACK - Enhanced Critical Response
+  # ============================================================================
+  # Takes over humidity control in THREE scenarios:
+  #   1. AC can't help (humidity request OFF due to temp floor)
+  #   2. Critical humidity (≥55%, configurable) - ALWAYS runs with or without AC
+  #   3. Temperature request OFF (AC not running for temp anyway)
+  #
+  # Critical humidity mode: Standalone runs alongside AC for maximum dehumidification
+  # Uses master bedroom sensor (where standalone is located) for local control
+  - id: standalone_dehumidifier_fallback
+    alias: "Standalone Dehumidifier with Critical Response"
+    description: "Control standalone when AC can't help OR humidity is critical"
+    trigger:
+      # Master bedroom humidity changes (where standalone is located)
+      - platform: state
+        entity_id: sensor.third_reality_inc_3rths24bz_humidity
+      # Humidity request state changes
+      - platform: state
+        entity_id: input_boolean.coordinated_cooling_hum_request
+      # Temperature request state changes
+      - platform: state
+        entity_id: input_boolean.coordinated_cooling_temp_request
+      # Target/tolerance changes
+      - platform: state
+        entity_id:
+          - input_number.coordinated_target_humidity
+          - input_number.coordinated_critical_humidity
+          - input_number.coordinated_wet_tolerance
+          - input_number.coordinated_dry_tolerance
+      # Startup
+      - platform: homeassistant
+        event: start
+    condition:
+      # Only act if system is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_system_enabled
+        state: "on"
+    action:
+      - variables:
+          current_hum: "{{ states(states('input_text.coordinated_master_hum_sensor')) | float(49.0) }}"
+          target_hum: "{{ states('input_number.coordinated_target_humidity') | float(49.0) }}"
+          critical_hum: "{{ states('input_number.coordinated_critical_humidity') | float(55.0) }}"
+          wet_tol: "{{ states('input_number.coordinated_wet_tolerance') | float(0.0) }}"
+          dry_tol: "{{ states('input_number.coordinated_dry_tolerance') | float(3.0) }}"
+          standalone: "{{ states(states('input_text.coordinated_standalone_dehumidifier')) }}"
+          hum_req_on: "{{ is_state('input_boolean.coordinated_cooling_hum_request', 'on') }}"
+          temp_req_on: "{{ is_state('input_boolean.coordinated_cooling_temp_request', 'on') }}"
+          is_critical: "{{ current_hum >= critical_hum }}"
+          
+          # Standalone should run if:
+          # 1. Humidity exceeds target AND
+          # 2. (AC humidity request OFF OR critical humidity) AND
+          # 3. AC temp request OFF (not running for temp) AND
+          # 4. Not currently running
+          should_on: "{{ current_hum > (target_hum + wet_tol) and (not hum_req_on or is_critical) and not temp_req_on }}"
+          
+          # Standalone should stop if:
+          # 1. Humidity below target - dry_tolerance AND
+          # 2. Currently running
+          should_off: "{{ current_hum < (target_hum - dry_tol) }}"
+      
+      - choose:
+          # ===== TURN ON STANDALONE =====
+          - conditions:
+              - condition: template
+                value_template: "{{ should_on and standalone == 'off' }}"
+            sequence:
+              - service: humidifier.turn_on
+                target:
+                  entity_id: "{{ states('input_text.coordinated_standalone_dehumidifier') }}"
+              - service: "{{ states('input_text.coordinated_notification_service') }}"
+                data:
+                  title: "Standalone Dehumidifier"
+                  message: >-
+                    {% if is_critical %}
+                    🚨 CRITICAL humidity {{ current_hum | round(1) }}%! Standalone activated (working with AC for maximum dehumidification).
+                    {% else %}
+                    High humidity ({{ current_hum | round(1) }}%)! Standalone activated (AC too cold to help).
+                    {% endif %}
+              - service: system_log.write
+                data:
+                  message: >-
+                    🔧 Standalone ON: {{ current_hum | round(1) }}% > {{ (target_hum + wet_tol) | round(1) }}% 
+                    ({{ 'CRITICAL - dual device mode' if is_critical else 'AC disabled by temp floor' }})
+                  level: warning
+          
+          # ===== TURN OFF STANDALONE =====
+          - conditions:
+              - condition: template
+                value_template: "{{ should_off and standalone == 'on' }}"
+            sequence:
+              - service: humidifier.turn_off
+                target:
+                  entity_id: "{{ states('input_text.coordinated_standalone_dehumidifier') }}"
+              - service: "{{ states('input_text.coordinated_notification_service') }}"
+                data:
+                  title: "Standalone Dehumidifier"
+                  message: "Humidity normal ({{ current_hum | round(1) }}%)! Standalone dehumidifier turned off."
+              - service: system_log.write
+                data:
+                  message: "🔧 Standalone OFF: {{ current_hum | round(1) }}% < {{ (target_hum - dry_tol) | round(1) }}%"
+                  level: warning
+    mode: queued
+
+  # ============================================================================
+  # SENSOR HEALTH MONITORING - Failure Detection
+  # ============================================================================
+  # Alerts when critical sensors become unavailable to prevent silent failures
+  - id: alert_critical_sensor_failure
+    alias: "Alert Critical Sensor Failure"
+    description: "Notify when critical sensors fail"
+    trigger:
+      - platform: state
+        entity_id:
+          - sensor.third_reality_inc_3rths24bz_temperature
+          - sensor.third_reality_inc_3rths24bz_humidity
+          - sensor.max_indoor_humidity_sensor
+        to: "unavailable"
+        for: "00:05:00"
+    action:
+      - service: "{{ states('input_text.coordinated_notification_service') }}"
+        data:
+          title: "⚠️ Sensor Failure"
+          message: "Critical sensor {{ trigger.to_state.attributes.friendly_name }} unavailable for 5+ minutes. Check sensor status."
+      - service: system_log.write
+        data:
+          message: "⚠️ CRITICAL: Sensor {{ trigger.entity_id }} unavailable for 5+ minutes"
+          level: error
+    mode: queued
+
+  # ============================================================================
+  # EMERGENCY SHUTOFF - Safety Protection
+  # ============================================================================
+  # Last resort protection against dangerous overcooling
+  # Completely disables system if temperature drops too low
+  - id: emergency_shutoff_coordinated
+    alias: "Emergency Shutoff - Coordinated System"
+    description: "Emergency stop if temperature drops dangerously low"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.third_reality_inc_3rths24bz_temperature
+        below: input_number.coordinated_emergency_temp
+        for: "00:02:00"
+    condition:
+      - condition: state
+        entity_id: switch.meross_cool_switch
+        state: "on"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.meross_cool_switch
+      - service: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.coordinated_cooling_temp_request
+            - input_boolean.coordinated_cooling_hum_request
+            - input_boolean.coordinated_system_enabled
+      - service: timer.start
+        target:
+          entity_id: timer.coordinated_cooler_min_cycle
+      - service: "{{ states('input_text.coordinated_notification_service') }}"
+        data:
+          title: "🚨 AC Emergency Shutoff"
+          message: >-
+            Temperature dropped to {{ states('sensor.third_reality_inc_3rths24bz_temperature') }}°F! 
+            AC disabled for safety. Check system immediately.
+      - service: system_log.write
+        data:
+          message: "🚨 EMERGENCY SHUTOFF: Temp {{ states('sensor.third_reality_inc_3rths24bz_temperature') }}°F - system disabled"
+          level: error
+    mode: single
+
+# ==============================================================================
+# UNINSTALLATION GUIDE
+# ==============================================================================
+#
+# To completely remove this package:
+#
+# 1. BACKUP (Optional but recommended):
+#    cp /config/packages/coordinated.yaml /config/coordinated.yaml.backup
+#
+# 2. DELETE FILE:
+#    rm /config/packages/coordinated.yaml
+#
+# 3. RESTART HOME ASSISTANT:
+#    Settings → System → Restart
+#
+# 4. DELETE ORPHANED ENTITIES:
+#    Settings → Devices & Services → Entities
+#    Search: "coordinated"
+#    Select all → Delete
+#
+# 5. VERIFY CLEANUP:
+#    Developer Tools → States
+#    Search: "coordinated"
+#    Should return no results
+#
+# ==============================================================================
