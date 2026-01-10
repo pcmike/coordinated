@@ -38,16 +38,16 @@ cards:
         display_mode: slider
         primary_info: state
         secondary_info: none
-        icon_color: red
+        icon_color: "#EF9A9A"
       - type: custom:mushroom-number-card
         entity: input_number.coordinated_humidity_off_threshold
         display_mode: slider
         primary_info: state
         secondary_info: none
-        icon_color: green
+        icon_color: "#4CAF50"
       - type: custom:mushroom-number-card
         entity: input_number.coordinated_humidity_floor_temp
         display_mode: slider
         primary_info: state
         secondary_info: none
-        icon_color: orange
+        icon_color: "#FFB74D"
