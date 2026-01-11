@@ -7,7 +7,7 @@
 #
 # HOW IT WORKS:
 #   1. Normal operation: Thermostat runs at your chosen preset (home/sleep/away)
-#   2. High humidity (>50%): Lowers to floor temperature (default 70°F) to dehumidify
+#   2. High humidity (>49%): Lowers to floor temperature (default 70°F) to dehumidify
 #   3. If AC can't clear humidity (temp at floor): Standalone dehumidifier helps
 #   4. Humidity normal (<47%): Returns to previous temperature
 #
@@ -24,7 +24,7 @@ input_number:
     min: 40
     max: 70
     step: 1
-    initial: 50
+    initial: 49
     unit_of_measurement: "%"
     icon: mdi:water-plus
     # Humidity level that triggers dehumidification mode
@@ -200,9 +200,14 @@ automation:
           entity_id: input_boolean.coordinated_humidity_active
 
       # Turn off standalone if it was running
-      - service: humidifier.turn_off
-        target:
-          entity_id: humidifier.151732605035846_humidifier
+      - if:
+          - condition: state
+            entity_id: humidifier.151732605035846_humidifier
+            state: "on"
+        then:
+          - service: humidifier.turn_off
+            target:
+              entity_id: humidifier.151732605035846_humidifier
 
       # Only restore temp if still at floor temp (no manual override)
       - if:
@@ -322,9 +327,14 @@ automation:
           entity_id: input_boolean.coordinated_humidity_suppressed
 
       # Turn off standalone if it was running
-      - service: humidifier.turn_off
-        target:
-          entity_id: humidifier.151732605035846_humidifier
+      - if:
+          - condition: state
+            entity_id: humidifier.151732605035846_humidifier
+            state: "on"
+        then:
+          - service: humidifier.turn_off
+            target:
+              entity_id: humidifier.151732605035846_humidifier
 
       # Notify
       - service: notify.mobile_app_midnight
@@ -365,9 +375,14 @@ automation:
           - service: input_boolean.turn_off
             target:
               entity_id: input_boolean.coordinated_humidity_active
-          - service: humidifier.turn_off
-            target:
-              entity_id: humidifier.151732605035846_humidifier
+          - if:
+              - condition: state
+                entity_id: humidifier.151732605035846_humidifier
+                state: "on"
+            then:
+              - service: humidifier.turn_off
+                target:
+                  entity_id: humidifier.151732605035846_humidifier
           - service: system_log.write
             data:
               message: "Coordinated Startup: humidity_active was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Turned OFF humidity_active and standalone."

@@ -5,7 +5,7 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 ## How It Works
 
 1. **Normal operation**: Thermostat runs at your chosen temperature
-2. **High humidity (>50%)**: Lowers to floor temperature (default 70°F) to dehumidify using AC
+2. **High humidity (>49%)**: Lowers to floor temperature (default 70°F) to dehumidify using AC
 3. **AC can't clear humidity**: If temperature reaches floor but humidity persists, standalone dehumidifier activates
 4. **Humidity normal (<47%)**: Returns to previous temperature, turns off standalone dehumidifier
 
@@ -45,7 +45,7 @@ All user-configurable options are at the top of `coordinated.yaml`:
 
 | Setting | Default | Range | Description |
 |---------|---------|-------|-------------|
-| `coordinated_humidity_on_threshold` | 50% | 40-70% | Humidity level that triggers dehumidification |
+| `coordinated_humidity_on_threshold` | 49% | 40-70% | Humidity level that triggers dehumidification |
 | `coordinated_humidity_off_threshold` | 47% | 35-65% | Humidity level that exits dehumidification |
 | `coordinated_humidity_floor_temp` | 70°F | 65-75°F | Temperature to cool to when dehumidifying |
 
