@@ -176,11 +176,6 @@ automation:
           title: "🌡️ Humidity High"
           message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%. Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
 
-      # Log
-      - service: system_log.write
-        data:
-          message: "Coordinated: Humidity {{ states('sensor.max_indoor_humidity_sensor') }}% > threshold, lowering to {{ states('input_number.coordinated_humidity_floor_temp') }}°F"
-          level: warning
     mode: single
 
   # ============================================================================
@@ -229,11 +224,6 @@ automation:
         target:
           entity_id: humidifier.151732605035846_humidifier
 
-      # Log
-      - service: system_log.write
-        data:
-          message: "Coordinated: Humidity {{ states('sensor.max_indoor_humidity_sensor') }}% < threshold, exiting humidity mode"
-          level: warning
     mode: single
 
   # ============================================================================
@@ -268,11 +258,6 @@ automation:
           title: "💨 Standalone On"
           message: "AC cooled to floor but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
 
-      # Log
-      - service: system_log.write
-        data:
-          message: "Coordinated: AC off but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%, standalone activated"
-          level: warning
     mode: single
 
   # ============================================================================
@@ -311,11 +296,6 @@ automation:
           title: "⏸️ Humidity Paused"
           message: "You changed settings. Humidity control paused until humidity drops below {{ states('input_number.coordinated_humidity_off_threshold') | int }}%."
 
-      # Log
-      - service: system_log.write
-        data:
-          message: "Coordinated: Manual override detected, humidity mode suppressed"
-          level: warning
     mode: single
 
   # ============================================================================
@@ -348,11 +328,6 @@ automation:
           title: "▶️ Humidity Ready"
           message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Humidity control re-enabled."
 
-      # Log
-      - service: system_log.write
-        data:
-          message: "Coordinated: Humidity dropped, suppression cleared, standalone turned off"
-          level: info
     mode: single
 
   # ============================================================================
@@ -391,7 +366,7 @@ automation:
               entity_id: humidifier.151732605035846_humidifier
           - service: system_log.write
             data:
-              message: "Coordinated Startup: humidity_active was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold ({{ states('input_number.coordinated_humidity_off_threshold') }}%). Turned OFF humidity_active and standalone dehumidifier."
+              message: "Coordinated Startup: humidity_active was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Turned OFF humidity_active and standalone."
               level: warning
 
       # If suppressed but humidity is below threshold, clear suppression
@@ -408,14 +383,14 @@ automation:
               entity_id: input_boolean.coordinated_humidity_suppressed
           - service: system_log.write
             data:
-              message: "Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold ({{ states('input_number.coordinated_humidity_off_threshold') }}%). Cleared suppression."
-              level: info
+              message: "Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Cleared suppression."
+              level: warning
 
       # Log startup complete with current state
       - service: system_log.write
         data:
           message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}"
-          level: info
+          level: warning
     mode: single
 
 # ==============================================================================
