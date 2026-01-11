@@ -194,6 +194,16 @@ automation:
         entity_id: input_boolean.coordinated_humidity_active
         state: "on"
     action:
+      # Mark humidity control as inactive FIRST (prevents Manual Override race condition)
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_humidity_active
+
+      # Turn off standalone if it was running
+      - service: humidifier.turn_off
+        target:
+          entity_id: humidifier.151732605035846_humidifier
+
       # Only restore temp if still at floor temp (no manual override)
       - if:
           - condition: template
@@ -213,16 +223,6 @@ automation:
             data:
               title: "✅ Humidity Normal"
               message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Keeping your manual settings."
-
-      # Mark humidity control as inactive
-      - service: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.coordinated_humidity_active
-
-      # Turn off standalone if it was running
-      - service: humidifier.turn_off
-        target:
-          entity_id: humidifier.151732605035846_humidifier
 
     mode: single
 
@@ -267,9 +267,10 @@ automation:
     alias: "Coordinated: Manual Override - Exit Humidity Mode"
     description: "Exit humidity mode if someone manually changes temperature or turns off climate"
     trigger:
-      # Temperature changed away from floor temp
-      - platform: template
-        value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(0) != states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
+      # Thermostat temperature attribute changed
+      - platform: state
+        entity_id: climate.coordinated_thermostat
+        attribute: temperature
       # Climate turned off
       - platform: state
         entity_id: climate.coordinated_thermostat
@@ -279,6 +280,9 @@ automation:
       - condition: state
         entity_id: input_boolean.coordinated_humidity_active
         state: "on"
+      # And temperature is no longer at floor temp (actual manual override)
+      - condition: template
+        value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(0) != states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
     action:
       # Mark humidity control as inactive
       - service: input_boolean.turn_off

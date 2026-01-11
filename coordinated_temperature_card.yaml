@@ -1,5 +1,5 @@
 type: custom:mushroom-template-card
-primary: "Indoor: {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | default(0) | round(1) }}°F"
+primary: "Indoor: {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(0) | round(1) }}°F"
 icon: mdi:snowflake
 icon_color: |
   {% if states('climate.coordinated_thermostat') == 'off' %}
