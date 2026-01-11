@@ -4,18 +4,26 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 
 ## How It Works
 
+### Humidity Control
 1. **Normal operation**: Thermostat runs at your chosen temperature
 2. **High humidity (>49%)**: Lowers to floor temperature (default 70°F) to dehumidify using AC
 3. **AC can't clear humidity**: If temperature reaches floor but humidity persists, standalone dehumidifier activates
 4. **Humidity normal (<47%)**: Returns to previous temperature, turns off standalone dehumidifier
 
+### Day/Night Scheduling
+1. **Day mode**: At configured time, sets thermostat to day temperature
+2. **Night mode**: At configured time, sets thermostat to night temperature
+3. **Humidity priority**: Schedule skips if humidity control is active
+4. **Toggle**: Can be disabled entirely via dashboard
+
 ## Features
 
 - Automatic coordination between AC and standalone dehumidifier
+- Day/night temperature scheduling with humidity-aware logic
 - Manual override detection with suppression to prevent flapping
 - Startup sync to handle Home Assistant restarts gracefully
 - Mobile notifications for state changes
-- Dashboard cards with expandable settings
+- Dashboard cards with expandable settings and real-time status
 
 ## Files
 
@@ -43,11 +51,23 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 
 All user-configurable options are at the top of `coordinated.yaml`:
 
+### Humidity Control
+
 | Setting | Default | Range | Description |
 |---------|---------|-------|-------------|
 | `coordinated_humidity_on_threshold` | 49% | 40-70% | Humidity level that triggers dehumidification |
 | `coordinated_humidity_off_threshold` | 47% | 35-65% | Humidity level that exits dehumidification |
 | `coordinated_humidity_floor_temp` | 70°F | 65-75°F | Temperature to cool to when dehumidifying |
+
+### Day/Night Schedule
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `coordinated_schedule_enabled` | On | Enable/disable day/night automation |
+| `coordinated_day_temp` | 76°F | Temperature during daytime hours |
+| `coordinated_night_temp` | 73°F | Temperature during nighttime hours |
+| `coordinated_day_start` | — | Time to switch to day temperature |
+| `coordinated_night_start` | — | Time to switch to night temperature |
 
 These can also be adjusted via the expandable settings in the dashboard card.
 
@@ -99,12 +119,17 @@ Update these in `coordinated.yaml` to match your setup:
 
 ## Automations
 
+### Humidity Control
 1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold
 2. **Humidity Normal**: Exits dehumidification mode when humidity drops below OFF threshold
 3. **Standalone Fallback**: Activates standalone dehumidifier when AC can't reduce humidity further
 4. **Manual Override**: Detects manual changes and exits humidity mode with suppression
 5. **Clear Suppression**: Re-enables humidity control after humidity drops below threshold
 6. **Startup Sync**: Synchronizes state after Home Assistant restart
+
+### Day/Night Schedule
+7. **Day Mode**: Switches to day temperature at scheduled time (skips if humidity control active)
+8. **Night Mode**: Switches to night temperature at scheduled time (skips if humidity control active)
 
 ## License
 

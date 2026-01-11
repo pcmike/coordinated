@@ -58,11 +58,54 @@ input_number:
     unit_of_measurement: "°F"
     # Stores the temperature to restore if no preset was active
 
+  coordinated_day_temp:
+    name: "Day Temperature"
+    min: 65
+    max: 85
+    step: 1
+    initial: 76
+    unit_of_measurement: "°F"
+    icon: mdi:white-balance-sunny
+    # Temperature during daytime hours
+
+  coordinated_night_temp:
+    name: "Night Temperature"
+    min: 65
+    max: 85
+    step: 1
+    initial: 73
+    unit_of_measurement: "°F"
+    icon: mdi:moon-waning-crescent
+    # Temperature during nighttime hours
+
+# ==============================================================================
+# DAY/NIGHT SCHEDULE
+# ==============================================================================
+
+input_datetime:
+  coordinated_day_start:
+    name: "Day Start Time"
+    has_date: false
+    has_time: true
+    icon: mdi:weather-sunny
+
+  coordinated_night_start:
+    name: "Night Start Time"
+    has_date: false
+    has_time: true
+    icon: mdi:weather-night
+
 # ==============================================================================
 # INTERNAL STATE
 # ==============================================================================
 
 input_boolean:
+  coordinated_schedule_enabled:
+    name: "Day/Night Schedule Enabled"
+    initial: on
+    icon: mdi:calendar-clock
+    # Enable or disable automatic day/night temperature switching
+
   coordinated_humidity_active:
     name: "Humidity Control Active"
     initial: off
@@ -162,6 +205,9 @@ automation:
       - service: input_boolean.turn_on
         target:
           entity_id: input_boolean.coordinated_humidity_active
+      - wait_template: "{{ is_state('input_boolean.coordinated_humidity_active', 'on') }}"
+        timeout:
+          seconds: 5
 
       # Lower to floor temperature for dehumidification
       - service: climate.set_temperature
@@ -198,6 +244,9 @@ automation:
       - service: input_boolean.turn_off
         target:
           entity_id: input_boolean.coordinated_humidity_active
+      - wait_template: "{{ is_state('input_boolean.coordinated_humidity_active', 'off') }}"
+        timeout:
+          seconds: 5
 
       # Turn off standalone if it was running
       - if:
@@ -410,6 +459,68 @@ automation:
         data:
           message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}"
           level: warning
+    mode: single
+
+  # ============================================================================
+  # DAY MODE - Switch to Day Temperature
+  # ============================================================================
+  - id: coordinated_day_mode
+    alias: "Coordinated: Day Mode"
+    description: "Switch to day temperature at scheduled time"
+    trigger:
+      - platform: time
+        at: input_datetime.coordinated_day_start
+    condition:
+      # Only if schedule is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_schedule_enabled
+        state: "on"
+      # And not in humidity control mode
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_active
+        state: "off"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.coordinated_thermostat
+        data:
+          temperature: "{{ states('input_number.coordinated_day_temp') | float(76) }}"
+
+      - service: notify.mobile_app_midnight
+        data:
+          title: "☀️ Day Mode"
+          message: "Switched to {{ states('input_number.coordinated_day_temp') | int }}°F."
+    mode: single
+
+  # ============================================================================
+  # NIGHT MODE - Switch to Night Temperature
+  # ============================================================================
+  - id: coordinated_night_mode
+    alias: "Coordinated: Night Mode"
+    description: "Switch to night temperature at scheduled time"
+    trigger:
+      - platform: time
+        at: input_datetime.coordinated_night_start
+    condition:
+      # Only if schedule is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_schedule_enabled
+        state: "on"
+      # And not in humidity control mode
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_active
+        state: "off"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.coordinated_thermostat
+        data:
+          temperature: "{{ states('input_number.coordinated_night_temp') | float(73) }}"
+
+      - service: notify.mobile_app_midnight
+        data:
+          title: "🌙 Night Mode"
+          message: "Switched to {{ states('input_number.coordinated_night_temp') | int }}°F."
     mode: single
 
 # ==============================================================================
