@@ -31,6 +31,9 @@ title-card:
       entity: climate.coordinated_thermostat
 title-card-button-overlay: true
 cards:
+  - type: markdown
+    content: |
+      {% if is_state('input_boolean.coordinated_humidity_active', 'on') and is_state('humidifier.151732605035846_humidifier', 'on') %}🔴 **Standalone** — Dehumidifier running until humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int }}%{% elif is_state('input_boolean.coordinated_humidity_active', 'on') %}🟠 **Active** — Cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F until humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int }}%{% elif is_state('input_boolean.coordinated_humidity_suppressed', 'on') %}⏸️ **Paused** — Waiting for humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int }}%{% else %}✅ **Ready** — Will activate when humidity > {{ states('input_number.coordinated_humidity_on_threshold') | int }}%{% endif %}
   - type: horizontal-stack
     cards:
       - type: custom:mushroom-number-card
