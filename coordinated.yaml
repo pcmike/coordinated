@@ -284,7 +284,7 @@ automation:
     trigger:
       # Temperature changed away from floor temp
       - platform: template
-        value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float != states('input_number.coordinated_humidity_floor_temp') | float }}"
+        value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(0) != states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
       # Climate turned off
       - platform: state
         entity_id: climate.coordinated_thermostat
