@@ -329,7 +329,7 @@ automation:
           - service: notify.mobile_app_midnight
             data:
               title: "🚨 Standalone Activated"
-              message: "Humidity still at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 30 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Standalone dehumidifier activated to assist."
+              message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 30 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Standalone dehumidifier activated."
               data:
                 push:
                   interruption-level: critical
