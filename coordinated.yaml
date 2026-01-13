@@ -24,37 +24,33 @@ input_number:
     min: 40
     max: 70
     step: 1
-    initial: 49
     unit_of_measurement: "%"
     icon: mdi:water-plus
-    # Humidity level that triggers dehumidification mode
+    # Humidity level that triggers dehumidification mode (default: 49%)
 
   coordinated_humidity_off_threshold:
     name: "Humidity OFF Threshold"
     min: 35
     max: 65
     step: 1
-    initial: 47
     unit_of_measurement: "%"
     icon: mdi:water-minus
-    # Humidity level that returns to normal preset
+    # Humidity level that returns to normal preset (default: 47%)
 
   coordinated_humidity_floor_temp:
     name: "Humidity Floor Temperature"
     min: 65
     max: 75
     step: 1
-    initial: 70
     unit_of_measurement: "°F"
     icon: mdi:thermometer-low
-    # Temperature to cool to when dehumidifying (lower = more aggressive)
+    # Temperature to cool to when dehumidifying (default: 70°F)
 
   coordinated_previous_temp:
     name: "Previous Temperature"
     min: 65
     max: 85
     step: 1
-    initial: 76
     unit_of_measurement: "°F"
     # Stores the temperature to restore if no preset was active
 
@@ -63,24 +59,36 @@ input_number:
     min: 65
     max: 85
     step: 1
-    initial: 76
     unit_of_measurement: "°F"
     icon: mdi:white-balance-sunny
-    # Temperature during daytime hours
+    # Temperature during daytime hours (default: 76°F)
 
   coordinated_night_temp:
     name: "Night Temperature"
     min: 65
     max: 85
     step: 1
-    initial: 73
     unit_of_measurement: "°F"
     icon: mdi:moon-waning-crescent
-    # Temperature during nighttime hours
+    # Temperature during nighttime hours (default: 73°F)
 
-# ==============================================================================
-# DAY/NIGHT SCHEDULE
-# ==============================================================================
+  coordinated_day_sun_offset:
+    name: "Day Sunrise Offset"
+    min: -120
+    max: 120
+    step: 5
+    unit_of_measurement: "min"
+    icon: mdi:timer-plus-outline
+    # Minutes before (-) or after (+) sunrise (default: 0)
+
+  coordinated_night_sun_offset:
+    name: "Night Sunset Offset"
+    min: -120
+    max: 120
+    step: 5
+    unit_of_measurement: "min"
+    icon: mdi:timer-minus-outline
+    # Minutes before (-) or after (+) sunset (default: -30)
 
 input_datetime:
   coordinated_day_start:
@@ -100,22 +108,36 @@ input_datetime:
 # ==============================================================================
 
 input_boolean:
+  coordinated_initialized:
+    name: "Package Initialized"
+    icon: mdi:check-circle
+    # Internal flag - tracks if first-run defaults have been applied
+    # No 'initial' so it persists across restarts
+
+  coordinated_humidity_enabled:
+    name: "Humidity Control Enabled"
+    icon: mdi:water-check
+    # Enable or disable automatic humidity control (default: on)
+
   coordinated_schedule_enabled:
     name: "Day/Night Schedule Enabled"
-    initial: on
     icon: mdi:calendar-clock
-    # Enable or disable automatic day/night temperature switching
+    # Enable or disable automatic day/night temperature switching (default: on)
+
+  coordinated_use_sun:
+    name: "Use Sunrise/Sunset"
+    icon: mdi:weather-sunset
+    # If on, use sunrise/sunset instead of fixed times (default: on)
 
   coordinated_humidity_active:
     name: "Humidity Control Active"
-    initial: off
     icon: mdi:water-alert
+    # Internal state - tracks if humidity control is currently active
 
   coordinated_humidity_suppressed:
     name: "Humidity Control Suppressed"
-    initial: off
     icon: mdi:water-off
-    # Prevents re-entry after manual override until humidity drops below threshold
+    # Internal state - prevents re-entry after manual override
 
 # ==============================================================================
 # TEMPLATE SENSORS
@@ -142,6 +164,31 @@ template:
         unique_id: coordinated_standalone_running
         state: "{{ is_state('humidifier.151732605035846_humidifier', 'on') }}"
         icon: mdi:air-humidifier
+
+  - sensor:
+      - name: "Coordinated Day Trigger Time"
+        unique_id: coordinated_day_trigger_time
+        state: >
+          {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
+            {% set sunrise = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+            {% set offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+            {{ (sunrise + timedelta(minutes=offset)).strftime('%H:%M:%S') }}
+          {% else %}
+            {{ states('input_datetime.coordinated_day_start') }}
+          {% endif %}
+        icon: mdi:weather-sunny
+
+      - name: "Coordinated Night Trigger Time"
+        unique_id: coordinated_night_trigger_time
+        state: >
+          {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
+            {% set sunset = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+            {% set offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+            {{ (sunset + timedelta(minutes=offset)).strftime('%H:%M:%S') }}
+          {% else %}
+            {{ states('input_datetime.coordinated_night_start') }}
+          {% endif %}
+        icon: mdi:weather-night
 
 # ==============================================================================
 # CLIMATE - GENERIC THERMOSTAT
@@ -185,7 +232,11 @@ automation:
         entity_id: sensor.max_indoor_humidity_sensor
         above: input_number.coordinated_humidity_on_threshold
     condition:
-      # Only trigger if not already in humidity control mode
+      # Only trigger if humidity control is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_enabled
+        state: "on"
+      # And not already in humidity control mode
       - condition: state
         entity_id: input_boolean.coordinated_humidity_active
         state: "off"
@@ -287,12 +338,22 @@ automation:
     alias: "Coordinated: Standalone Fallback"
     description: "Turn on standalone dehumidifier when AC can't help anymore"
     trigger:
-      # AC turns off
+      # AC turns off (normal case - AC reached floor temp)
       - platform: state
         entity_id: switch.meross_cool_switch
         to: "off"
+        id: ac_off
+      # Humidity mode activated (edge case - room already below floor temp)
+      - platform: state
+        entity_id: input_boolean.coordinated_humidity_active
+        to: "on"
+        id: humidity_activated
     condition:
-      # Only if humidity control is active
+      # Only if humidity control is enabled
+      - condition: state
+        entity_id: input_boolean.coordinated_humidity_enabled
+        state: "on"
+      # And humidity control is active
       - condition: state
         entity_id: input_boolean.coordinated_humidity_active
         state: "on"
@@ -300,17 +361,57 @@ automation:
       - condition: numeric_state
         entity_id: sensor.max_indoor_humidity_sensor
         above: input_number.coordinated_humidity_off_threshold
+      # And temperature has actually reached floor (within 1°F tolerance)
+      # This prevents standalone from activating when AC is off due to min_cycle_duration
+      - condition: template
+        value_template: >
+          {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(999)
+             <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + 1) }}
     action:
-      # Turn on standalone
-      - service: humidifier.turn_on
-        target:
-          entity_id: humidifier.151732605035846_humidifier
+      - choose:
+          # Path 1: AC turned off (normal case - AC reached floor temp)
+          - conditions:
+              - condition: trigger
+                id: ac_off
+            sequence:
+              - service: humidifier.turn_on
+                target:
+                  entity_id: humidifier.151732605035846_humidifier
+              - service: notify.mobile_app_midnight
+                data:
+                  title: "💨 Standalone On"
+                  message: "AC cooled to {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
 
-      # Notify
-      - service: notify.mobile_app_midnight
-        data:
-          title: "💨 Standalone On"
-          message: "AC cooled to floor but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
+          # Path 2: Humidity mode just activated (edge case - room already at/below floor)
+          - conditions:
+              - condition: trigger
+                id: humidity_activated
+            sequence:
+              # Wait for AC to potentially start
+              - delay:
+                  seconds: 30
+              # Re-check all conditions - only proceed if AC is off AND temp is at floor
+              - condition: state
+                entity_id: switch.meross_cool_switch
+                state: "off"
+              - condition: state
+                entity_id: input_boolean.coordinated_humidity_active
+                state: "on"
+              - condition: numeric_state
+                entity_id: sensor.max_indoor_humidity_sensor
+                above: input_number.coordinated_humidity_off_threshold
+              - condition: template
+                value_template: >
+                  {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(999)
+                     <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + 1) }}
+              # All conditions passed - room is at floor temp but AC can't help more
+              - service: humidifier.turn_on
+                target:
+                  entity_id: humidifier.151732605035846_humidifier
+              - service: notify.mobile_app_midnight
+                data:
+                  title: "💨 Standalone On"
+                  message: "Room already at {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) - AC can't help. Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
 
     mode: single
 
@@ -406,11 +507,95 @@ automation:
       # Wait for entities to be available
       - wait_template: >
           {{ states('sensor.max_indoor_humidity_sensor') not in ['unavailable', 'unknown'] and
+             states('input_boolean.coordinated_initialized') not in ['unavailable', 'unknown'] and
+             states('input_boolean.coordinated_humidity_enabled') not in ['unavailable', 'unknown'] and
              states('input_boolean.coordinated_humidity_active') not in ['unavailable', 'unknown'] and
              states('input_boolean.coordinated_humidity_suppressed') not in ['unavailable', 'unknown'] and
-             states('input_number.coordinated_humidity_off_threshold') not in ['unavailable', 'unknown'] }}
+             states('input_number.coordinated_humidity_off_threshold') not in ['unavailable', 'unknown'] and
+             states('input_boolean.coordinated_schedule_enabled') not in ['unavailable', 'unknown'] and
+             states('sun.sun') not in ['unavailable', 'unknown'] }}
         timeout:
           minutes: 5
+
+      # First-run initialization - set all defaults
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_initialized
+            state: "off"
+        then:
+          # Set humidity control defaults
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_humidity_enabled
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_humidity_on_threshold
+            data:
+              value: 49
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_humidity_off_threshold
+            data:
+              value: 47
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_humidity_floor_temp
+            data:
+              value: 70
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_previous_temp
+            data:
+              value: 76
+
+          # Set schedule defaults (sun-based enabled by default)
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_schedule_enabled
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_use_sun
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_day_temp
+            data:
+              value: 76
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_night_temp
+            data:
+              value: 73
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_day_sun_offset
+            data:
+              value: 0
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_night_sun_offset
+            data:
+              value: -30
+
+          # Set fixed time defaults (for when user switches to fixed times)
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.coordinated_day_start
+            data:
+              time: "06:00:00"
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.coordinated_night_start
+            data:
+              time: "21:00:00"
+
+          # Mark as initialized
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_initialized
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: First run - applied default settings (sun-based scheduling enabled, -30min sunset offset)"
+              level: warning
 
       # If humidity_active is on but humidity is below threshold, exit humidity mode
       - if:
@@ -454,10 +639,66 @@ automation:
               message: "Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Cleared suppression."
               level: warning
 
+      # Sync temperature based on schedule (if enabled and humidity control not active)
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_schedule_enabled
+            state: "on"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "off"
+        then:
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: >
+                {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
+                {% set now_time = now() %}
+                {% if use_sun %}
+                  {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+                  {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+                  {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
+                  {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
+                  {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+                  {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+                  {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
+                  {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
+                {% else %}
+                  {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
+                  {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
+                {% endif %}
+                {% if day_start <= now_time < night_start %}
+                  {{ states('input_number.coordinated_day_temp') | float(76) }}
+                {% else %}
+                  {{ states('input_number.coordinated_night_temp') | float(73) }}
+                {% endif %}
+          - service: system_log.write
+            data:
+              message: >
+                {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
+                {% set now_time = now() %}
+                {% if use_sun %}
+                  {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+                  {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+                  {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
+                  {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
+                  {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+                  {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+                  {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
+                  {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
+                {% else %}
+                  {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
+                  {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
+                {% endif %}
+                {% set is_day = day_start <= now_time < night_start %}
+                Coordinated Startup: Set temperature to {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F ({{ 'day' if is_day else 'night' }} mode).
+              level: warning
+
       # Log startup complete with current state
       - service: system_log.write
         data:
-          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}"
+          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}"
           level: warning
     mode: single
 
@@ -466,10 +707,10 @@ automation:
   # ============================================================================
   - id: coordinated_day_mode
     alias: "Coordinated: Day Mode"
-    description: "Switch to day temperature at scheduled time"
+    description: "Switch to day temperature at scheduled time or sunrise"
     trigger:
       - platform: time
-        at: input_datetime.coordinated_day_start
+        at: sensor.coordinated_day_trigger_time
     condition:
       # Only if schedule is enabled
       - condition: state
@@ -489,7 +730,12 @@ automation:
       - service: notify.mobile_app_midnight
         data:
           title: "☀️ Day Mode"
-          message: "Switched to {{ states('input_number.coordinated_day_temp') | int }}°F."
+          message: >
+            {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
+              Sunrise{% if states('input_number.coordinated_day_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_day_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
+            {% else %}
+              Switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
+            {% endif %}
     mode: single
 
   # ============================================================================
@@ -497,10 +743,10 @@ automation:
   # ============================================================================
   - id: coordinated_night_mode
     alias: "Coordinated: Night Mode"
-    description: "Switch to night temperature at scheduled time"
+    description: "Switch to night temperature at scheduled time or sunset"
     trigger:
       - platform: time
-        at: input_datetime.coordinated_night_start
+        at: sensor.coordinated_night_trigger_time
     condition:
       # Only if schedule is enabled
       - condition: state
@@ -520,7 +766,12 @@ automation:
       - service: notify.mobile_app_midnight
         data:
           title: "🌙 Night Mode"
-          message: "Switched to {{ states('input_number.coordinated_night_temp') | int }}°F."
+          message: >
+            {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
+              Sunset{% if states('input_number.coordinated_night_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_night_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
+            {% else %}
+              Switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
+            {% endif %}
     mode: single
 
 # ==============================================================================

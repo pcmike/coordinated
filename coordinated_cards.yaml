@@ -8,13 +8,18 @@ title-card:
       primary: "Humidity: {{ states('sensor.max_indoor_humidity_sensor') | float(0) | round(1) }}%"
       icon: mdi:water-percent
       icon_color: |
-        {% if is_state('binary_sensor.coordinated_standalone_running', 'on') %}
+        {% if is_state('input_boolean.coordinated_humidity_enabled', 'off') %}
+          grey
+        {% elif is_state('binary_sensor.coordinated_standalone_running', 'on') %}
           red
         {% elif is_state('binary_sensor.coordinated_ac_for_humidity', 'on') %}
           orange
         {% else %}
-          grey
+          blue
         {% endif %}
+      entity: input_boolean.coordinated_humidity_enabled
+      tap_action:
+        action: toggle
     - type: custom:mushroom-template-card
       primary: "Indoor: {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(0) | round(1) }}°F"
       icon: mdi:snowflake
@@ -31,71 +36,140 @@ title-card:
       entity: climate.coordinated_thermostat
 title-card-button-overlay: true
 cards:
-  # Humidity Control Status
   - type: markdown
     content: |
-      {% if is_state('input_boolean.coordinated_humidity_active', 'on') and is_state('humidifier.151732605035846_humidifier', 'on') %}🔴 **Standalone** — Dehumidifier running until humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int }}%{% elif is_state('input_boolean.coordinated_humidity_active', 'on') %}🟠 **Active** — Cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F until humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int }}%{% elif is_state('input_boolean.coordinated_humidity_suppressed', 'on') %}⏸️ **Paused** — Waiting for humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int }}%{% else %}✅ **Ready** — Will activate when humidity > {{ states('input_number.coordinated_humidity_on_threshold') | int }}%{% endif %}
-  # Humidity Control Settings
-  - type: horizontal-stack
+      {% if is_state('input_boolean.coordinated_humidity_enabled', 'off') %}🚫 **Humidity Off** — Humidity control disabled{% elif is_state('input_boolean.coordinated_humidity_active', 'on') and is_state('humidifier.151732605035846_humidifier', 'on') %}🔴 **Standalone** — Dehumidifier running until humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int(47) }}%{% elif is_state('input_boolean.coordinated_humidity_active', 'on') %}🟠 **Active** — Cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int(70) }}°F until humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int(47) }}%{% elif is_state('input_boolean.coordinated_humidity_suppressed', 'on') %}⏸️ **Paused** — Waiting for humidity < {{ states('input_number.coordinated_humidity_off_threshold') | int(47) }}%{% else %}✅ **Ready** — Will activate when humidity > {{ states('input_number.coordinated_humidity_on_threshold') | int(49) }}%{% endif %}
+  - type: conditional
+    conditions:
+      - condition: state
+        entity: input_boolean.coordinated_humidity_enabled
+        state: "on"
+    card:
+      type: horizontal-stack
+      cards:
+        - type: custom:mushroom-number-card
+          entity: input_number.coordinated_humidity_on_threshold
+          display_mode: slider
+          primary_info: state
+          secondary_info: none
+          icon_color: "#EF9A9A"
+        - type: custom:mushroom-number-card
+          entity: input_number.coordinated_humidity_off_threshold
+          display_mode: slider
+          primary_info: state
+          secondary_info: none
+          icon_color: "#4CAF50"
+        - type: custom:mushroom-number-card
+          entity: input_number.coordinated_humidity_floor_temp
+          display_mode: slider
+          primary_info: state
+          secondary_info: none
+          icon_color: "#FFB74D"
+  - type: custom:expander-card
+    expanded: false
+    padding: 0
+    title-card:
+      type: markdown
+      content: |
+        {% if is_state('input_boolean.coordinated_schedule_enabled', 'off') %}🚫 **Schedule Off** — Day/night automation disabled{% else %}{% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}{% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}{% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}{% if use_sun %}{% set day_str = 'Sunrise' ~ (' ' ~ day_offset ~ 'm' if day_offset != 0 else '') %}{% set night_str = 'Sunset' ~ (' ' ~ night_offset ~ 'm' if night_offset != 0 else '') %}{% else %}{% set day_time = states('input_datetime.coordinated_day_start') | default('06:00:00', true) %}{% set day_hour = day_time.split(':')[0] | int(0) %}{% set day_min = day_time.split(':')[1] | default('00', true) %}{% set day_ampm = 'AM' if day_hour < 12 else 'PM' %}{% set day_hour_12 = day_hour if day_hour <= 12 else day_hour - 12 %}{% set day_hour_12 = 12 if day_hour_12 == 0 else day_hour_12 %}{% set day_str = day_hour_12 | string ~ ':' ~ day_min ~ ' ' ~ day_ampm %}{% set night_time = states('input_datetime.coordinated_night_start') | default('21:00:00', true) %}{% set night_hour = night_time.split(':')[0] | int(0) %}{% set night_min = night_time.split(':')[1] | default('00', true) %}{% set night_ampm = 'AM' if night_hour < 12 else 'PM' %}{% set night_hour_12 = night_hour if night_hour <= 12 else night_hour - 12 %}{% set night_hour_12 = 12 if night_hour_12 == 0 else night_hour_12 %}{% set night_str = night_hour_12 | string ~ ':' ~ night_min ~ ' ' ~ night_ampm %}{% endif %}🕐 **Schedule** — ☀️ {{ states('input_number.coordinated_day_temp') | int(76) }}°F at {{ day_str }} · 🌙 {{ states('input_number.coordinated_night_temp') | int(73) }}°F at {{ night_str }}{% endif %}
+    title-card-button-overlay: true
     cards:
-      - type: custom:mushroom-number-card
-        entity: input_number.coordinated_humidity_on_threshold
-        display_mode: slider
-        primary_info: state
-        secondary_info: none
-        icon_color: "#EF9A9A"
-      - type: custom:mushroom-number-card
-        entity: input_number.coordinated_humidity_off_threshold
-        display_mode: slider
-        primary_info: state
-        secondary_info: none
-        icon_color: "#4CAF50"
-      - type: custom:mushroom-number-card
-        entity: input_number.coordinated_humidity_floor_temp
-        display_mode: slider
-        primary_info: state
-        secondary_info: none
-        icon_color: "#FFB74D"
-  # Schedule Status
-  - type: markdown
-    content: |
-      {% if is_state('input_boolean.coordinated_schedule_enabled', 'off') %}🚫 **Schedule Off** — Day/night automation disabled{% else %}{% set day_time = states('input_datetime.coordinated_day_start') %}{% set night_time = states('input_datetime.coordinated_night_start') %}{% set day_hour = day_time.split(':')[0] | int %}{% set day_min = day_time.split(':')[1] %}{% set night_hour = night_time.split(':')[0] | int %}{% set night_min = night_time.split(':')[1] %}{% set day_ampm = 'AM' if day_hour < 12 else 'PM' %}{% set night_ampm = 'AM' if night_hour < 12 else 'PM' %}{% set day_hour_12 = day_hour if day_hour <= 12 else day_hour - 12 %}{% set day_hour_12 = 12 if day_hour_12 == 0 else day_hour_12 %}{% set night_hour_12 = night_hour if night_hour <= 12 else night_hour - 12 %}{% set night_hour_12 = 12 if night_hour_12 == 0 else night_hour_12 %}🕐 **Schedule** — ☀️ {{ states('input_number.coordinated_day_temp') | int }}°F at {{ day_hour_12 }}:{{ day_min }} {{ day_ampm }} · 🌙 {{ states('input_number.coordinated_night_temp') | int }}°F at {{ night_hour_12 }}:{{ night_min }} {{ night_ampm }}{% endif %}
-  # Schedule Toggle and Temperature Settings
-  - type: horizontal-stack
-    cards:
-      - type: custom:mushroom-entity-card
-        entity: input_boolean.coordinated_schedule_enabled
-        icon_color: blue
-        tap_action:
-          action: toggle
-        primary_info: none
-        secondary_info: none
-      - type: custom:mushroom-number-card
-        entity: input_number.coordinated_day_temp
-        display_mode: slider
-        primary_info: state
-        secondary_info: none
-        icon_color: amber
-      - type: custom:mushroom-number-card
-        entity: input_number.coordinated_night_temp
-        display_mode: slider
-        primary_info: state
-        secondary_info: none
-        icon_color: indigo
-  # Schedule Time Settings
-  - type: horizontal-stack
-    cards:
-      - type: custom:mushroom-entity-card
-        entity: input_datetime.coordinated_day_start
-        primary_info: state
-        secondary_info: none
-        icon_color: amber
-        tap_action:
-          action: more-info
-      - type: custom:mushroom-entity-card
-        entity: input_datetime.coordinated_night_start
-        primary_info: state
-        secondary_info: none
-        icon_color: indigo
-        tap_action:
-          action: more-info
+      - type: horizontal-stack
+        cards:
+          - type: custom:stack-in-card
+            mode: vertical
+            cards:
+              - type: custom:mushroom-chips-card
+                alignment: center
+                card_mod:
+                  style: |
+                    ha-card {
+                      --chip-icon-size: 40px;
+                      --chip-height: 50px;
+                      --chip-background: transparent;
+                      --chip-border-width: 0;
+                      background: none !important;
+                      box-shadow: none !important;
+                    }
+                chips:
+                  - type: entity
+                    entity: input_boolean.coordinated_schedule_enabled
+                    icon_color: blue
+                    content_info: none
+                    tap_action:
+                      action: toggle
+              - type: custom:mushroom-chips-card
+                alignment: center
+                card_mod:
+                  style: |
+                    ha-card {
+                      --chip-icon-size: 40px;
+                      --chip-height: 50px;
+                      --chip-background: transparent;
+                      --chip-border-width: 0;
+                      background: none !important;
+                      box-shadow: none !important;
+                    }
+                chips:
+                  - type: entity
+                    entity: input_boolean.coordinated_use_sun
+                    icon_color: amber
+                    content_info: none
+                    tap_action:
+                      action: toggle
+          - type: custom:mushroom-number-card
+            entity: input_number.coordinated_day_temp
+            display_mode: slider
+            primary_info: state
+            secondary_info: none
+            icon_color: amber
+          - type: custom:mushroom-number-card
+            entity: input_number.coordinated_night_temp
+            display_mode: slider
+            primary_info: state
+            secondary_info: none
+            icon_color: indigo
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: input_boolean.coordinated_use_sun
+            state: "on"
+        card:
+          type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: input_number.coordinated_day_sun_offset
+              primary: "Sunrise offset: {{ states('input_number.coordinated_day_sun_offset') | int(0) }}m"
+              icon: mdi:weather-sunset-up
+              icon_color: amber
+              tap_action:
+                action: more-info
+            - type: custom:mushroom-template-card
+              entity: input_number.coordinated_night_sun_offset
+              primary: "Sunset offset: {{ states('input_number.coordinated_night_sun_offset') | int(0) }}m"
+              icon: mdi:weather-sunset-down
+              icon_color: indigo
+              tap_action:
+                action: more-info
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: input_boolean.coordinated_use_sun
+            state: "off"
+        card:
+          type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: input_datetime.coordinated_day_start
+              primary: "Daytime start: {{ (states('input_datetime.coordinated_day_start') | default('06:00:00', true))[:5] }}"
+              icon: mdi:weather-sunny
+              icon_color: amber
+              tap_action:
+                action: more-info
+            - type: custom:mushroom-template-card
+              entity: input_datetime.coordinated_night_start
+              primary: "Nighttime start: {{ (states('input_datetime.coordinated_night_start') | default('21:00:00', true))[:5] }}"
+              icon: mdi:weather-night
+              icon_color: indigo
+              tap_action:
+                action: more-info

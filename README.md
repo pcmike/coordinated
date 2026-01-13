@@ -11,15 +11,17 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 4. **Humidity normal (<47%)**: Returns to previous temperature, turns off standalone dehumidifier
 
 ### Day/Night Scheduling
-1. **Day mode**: At configured time, sets thermostat to day temperature
-2. **Night mode**: At configured time, sets thermostat to night temperature
-3. **Humidity priority**: Schedule skips if humidity control is active
-4. **Toggle**: Can be disabled entirely via dashboard
+1. **Day mode**: At configured time or sunrise, sets thermostat to day temperature
+2. **Night mode**: At configured time or sunset, sets thermostat to night temperature
+3. **Sun tracking**: Optionally use sunrise/sunset with adjustable offset (-120 to +120 minutes)
+4. **Humidity priority**: Schedule skips if humidity control is active
+5. **Toggle**: Can be disabled entirely via dashboard
 
 ## Features
 
 - Automatic coordination between AC and standalone dehumidifier
 - Day/night temperature scheduling with humidity-aware logic
+- Sunrise/sunset tracking with configurable offset
 - Manual override detection with suppression to prevent flapping
 - Startup sync to handle Home Assistant restarts gracefully
 - Mobile notifications for state changes
@@ -55,6 +57,7 @@ All user-configurable options are at the top of `coordinated.yaml`:
 
 | Setting | Default | Range | Description |
 |---------|---------|-------|-------------|
+| `coordinated_humidity_enabled` | On | On/Off | Enable/disable automatic humidity control |
 | `coordinated_humidity_on_threshold` | 49% | 40-70% | Humidity level that triggers dehumidification |
 | `coordinated_humidity_off_threshold` | 47% | 35-65% | Humidity level that exits dehumidification |
 | `coordinated_humidity_floor_temp` | 70°F | 65-75°F | Temperature to cool to when dehumidifying |
@@ -64,12 +67,15 @@ All user-configurable options are at the top of `coordinated.yaml`:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `coordinated_schedule_enabled` | On | Enable/disable day/night automation |
+| `coordinated_use_sun` | On | Use sunrise/sunset instead of fixed times |
 | `coordinated_day_temp` | 76°F | Temperature during daytime hours |
 | `coordinated_night_temp` | 73°F | Temperature during nighttime hours |
-| `coordinated_day_start` | — | Time to switch to day temperature |
-| `coordinated_night_start` | — | Time to switch to night temperature |
+| `coordinated_day_sun_offset` | 0 min | Minutes before (-) or after (+) sunrise |
+| `coordinated_night_sun_offset` | -30 min | Minutes before (-) or after (+) sunset |
+| `coordinated_day_start` | 6:00 AM | Time to switch to day temperature (when using fixed times) |
+| `coordinated_night_start` | 9:00 PM | Time to switch to night temperature (when using fixed times) |
 
-These can also be adjusted via the expandable settings in the dashboard card.
+**Note:** All settings persist across Home Assistant restarts. Defaults are only applied on first installation. These can also be adjusted via the expandable settings in the dashboard card.
 
 ## Dashboard Cards
 
@@ -120,16 +126,16 @@ Update these in `coordinated.yaml` to match your setup:
 ## Automations
 
 ### Humidity Control
-1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold
+1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold (requires humidity control enabled)
 2. **Humidity Normal**: Exits dehumidification mode when humidity drops below OFF threshold
 3. **Standalone Fallback**: Activates standalone dehumidifier when AC can't reduce humidity further
 4. **Manual Override**: Detects manual changes and exits humidity mode with suppression
 5. **Clear Suppression**: Re-enables humidity control after humidity drops below threshold
-6. **Startup Sync**: Synchronizes state after Home Assistant restart
+6. **Startup Sync**: Synchronizes state after Home Assistant restart, including setting correct day/night temperature based on schedule
 
 ### Day/Night Schedule
-7. **Day Mode**: Switches to day temperature at scheduled time (skips if humidity control active)
-8. **Night Mode**: Switches to night temperature at scheduled time (skips if humidity control active)
+7. **Day Mode**: Switches to day temperature at scheduled time or sunrise (skips if humidity control active)
+8. **Night Mode**: Switches to night temperature at scheduled time or sunset (skips if humidity control active)
 
 ## License
 
