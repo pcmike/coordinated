@@ -20,11 +20,12 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 ## Features
 
 - Automatic coordination between AC and standalone dehumidifier
+- Smart humidity alerts: only notifies if humidity isn't clearing after 15 minutes
 - Day/night temperature scheduling with humidity-aware logic
 - Sunrise/sunset tracking with configurable offset
 - Manual override detection with suppression to prevent flapping
 - Startup sync to handle Home Assistant restarts gracefully
-- Mobile notifications for state changes
+- All events logged for debugging (filtered by "Coordinated:" prefix)
 - Dashboard cards with expandable settings and real-time status
 
 ## Files
@@ -126,9 +127,9 @@ Update these in `coordinated.yaml` to match your setup:
 ## Automations
 
 ### Humidity Control
-1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold (requires humidity control enabled)
+1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold
 2. **Humidity Normal**: Exits dehumidification mode when humidity drops below OFF threshold
-3. **Standalone Fallback**: Activates standalone dehumidifier when AC can't reduce humidity further
+3. **Standalone Fallback**: Activates standalone dehumidifier when AC reaches floor temp but humidity persists
 4. **Manual Override**: Detects manual changes and exits humidity mode with suppression
 5. **Clear Suppression**: Re-enables humidity control after humidity drops below threshold
 6. **Startup Sync**: Synchronizes state after Home Assistant restart, including setting correct day/night temperature based on schedule
@@ -136,6 +137,22 @@ Update these in `coordinated.yaml` to match your setup:
 ### Day/Night Schedule
 7. **Day Mode**: Switches to day temperature at scheduled time or sunrise (skips if humidity control active)
 8. **Night Mode**: Switches to night temperature at scheduled time or sunset (skips if humidity control active)
+
+## Notifications & Logging
+
+All events are logged at WARNING level with "Coordinated:" prefix for easy filtering.
+
+**Critical phone notifications (iOS)** are only sent in two scenarios:
+
+| Alert | When | Message |
+|-------|------|---------|
+| 🚨 Humidity Not Clearing | 15 min after trigger, humidity hasn't dropped 2% | "Humidity at X% after 15 min (started at Y%)" |
+| 🚨 Standalone Activated | 30 min after trigger, humidity still above ON threshold | "Humidity at X% after 30 min (started at Y%). Standalone activated" |
+
+**Examples:**
+- Trigger at 52%, drops to 49% in 15 min → No notification (dropped 3% ≥ 2%)
+- Trigger at 52%, still at 51% in 15 min → Notification (dropped only 1%)
+- Trigger at 52%, still at 50% in 30 min → Notification + standalone activates
 
 ## License
 
