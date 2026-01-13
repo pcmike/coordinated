@@ -267,11 +267,30 @@ automation:
         data:
           temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
 
-      # Notify
-      - service: notify.mobile_app_midnight
+      # Log the event
+      - service: system_log.write
         data:
-          title: "🌡️ Humidity High"
-          message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%. Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
+          message: "Coordinated: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
+          level: warning
+
+      # Wait 15 minutes, then send critical notification if still high
+      - delay:
+          minutes: 15
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "on"
+          - condition: numeric_state
+            entity_id: sensor.max_indoor_humidity_sensor
+            above: input_number.coordinated_humidity_on_threshold
+        then:
+          - service: notify.mobile_app_midnight
+            data:
+              title: "🚨 Humidity Still High"
+              message: "Humidity still at {{ states('sensor.max_indoor_humidity_sensor') }}% after 15 minutes. Currently cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F."
+              data:
+                push:
+                  interruption-level: critical
 
     mode: single
 
@@ -319,15 +338,15 @@ automation:
               entity_id: climate.coordinated_thermostat
             data:
               temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
-          - service: notify.mobile_app_midnight
+          - service: system_log.write
             data:
-              title: "✅ Humidity Normal"
-              message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%. Restored to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
+              message: "Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%). Restored to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
+              level: warning
         else:
-          - service: notify.mobile_app_midnight
+          - service: system_log.write
             data:
-              title: "✅ Humidity Normal"
-              message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Keeping your manual settings."
+              message: "Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Keeping manual settings."
+              level: warning
 
     mode: single
 
@@ -377,10 +396,10 @@ automation:
               - service: humidifier.turn_on
                 target:
                   entity_id: humidifier.151732605035846_humidifier
-              - service: notify.mobile_app_midnight
+              - service: system_log.write
                 data:
-                  title: "💨 Standalone On"
-                  message: "AC cooled to {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
+                  message: "Coordinated: Standalone on. AC cooled to {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%."
+                  level: warning
 
           # Path 2: Humidity mode just activated (edge case - room already at/below floor)
           - conditions:
@@ -408,10 +427,10 @@ automation:
               - service: humidifier.turn_on
                 target:
                   entity_id: humidifier.151732605035846_humidifier
-              - service: notify.mobile_app_midnight
+              - service: system_log.write
                 data:
-                  title: "💨 Standalone On"
-                  message: "Room already at {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) - AC can't help. Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%. Standalone dehumidifier activated."
+                  message: "Coordinated: Standalone on. Room already at {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) - AC can't help. Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%."
+                  level: warning
 
     mode: single
 
@@ -449,11 +468,11 @@ automation:
         target:
           entity_id: input_boolean.coordinated_humidity_suppressed
 
-      # Notify
-      - service: notify.mobile_app_midnight
+      # Log the event
+      - service: system_log.write
         data:
-          title: "⏸️ Humidity Paused"
-          message: "You changed settings. Humidity control paused until humidity drops below {{ states('input_number.coordinated_humidity_off_threshold') | int }}%."
+          message: "Coordinated: Manual override detected. Humidity control paused until humidity drops below {{ states('input_number.coordinated_humidity_off_threshold') | int }}%."
+          level: warning
 
     mode: single
 
@@ -486,11 +505,11 @@ automation:
             target:
               entity_id: humidifier.151732605035846_humidifier
 
-      # Notify
-      - service: notify.mobile_app_midnight
+      # Log the event
+      - service: system_log.write
         data:
-          title: "▶️ Humidity Ready"
-          message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Humidity control re-enabled."
+          message: "Coordinated: Suppression cleared. Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Humidity control re-enabled."
+          level: warning
 
     mode: single
 
@@ -727,15 +746,15 @@ automation:
         data:
           temperature: "{{ states('input_number.coordinated_day_temp') | float(76) }}"
 
-      - service: notify.mobile_app_midnight
+      - service: system_log.write
         data:
-          title: "☀️ Day Mode"
           message: >
             {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
-              Sunrise{% if states('input_number.coordinated_day_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_day_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
+              Coordinated: Day mode. Sunrise{% if states('input_number.coordinated_day_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_day_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
             {% else %}
-              Switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
+              Coordinated: Day mode. Switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
             {% endif %}
+          level: warning
     mode: single
 
   # ============================================================================
@@ -763,15 +782,15 @@ automation:
         data:
           temperature: "{{ states('input_number.coordinated_night_temp') | float(73) }}"
 
-      - service: notify.mobile_app_midnight
+      - service: system_log.write
         data:
-          title: "🌙 Night Mode"
           message: >
             {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
-              Sunset{% if states('input_number.coordinated_night_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_night_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
+              Coordinated: Night mode. Sunset{% if states('input_number.coordinated_night_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_night_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
             {% else %}
-              Switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
+              Coordinated: Night mode. Switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
             {% endif %}
+          level: warning
     mode: single
 
 # ==============================================================================
