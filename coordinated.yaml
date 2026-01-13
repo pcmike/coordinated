@@ -54,6 +54,14 @@ input_number:
     unit_of_measurement: "°F"
     # Stores the temperature to restore if no preset was active
 
+  coordinated_trigger_humidity:
+    name: "Trigger Humidity"
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+    # Stores the humidity level that triggered dehumidification
+
   coordinated_day_temp:
     name: "Day Temperature"
     min: 65
@@ -252,6 +260,13 @@ automation:
         data:
           value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) | round(0) }}"
 
+      # Save triggering humidity value
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.coordinated_trigger_humidity
+        data:
+          value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
+
       # Mark humidity control as active
       - service: input_boolean.turn_on
         target:
@@ -273,7 +288,31 @@ automation:
           message: "Coordinated: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
           level: warning
 
-      # Wait 15 minutes, then send critical notification if still high
+      # Wait 15 minutes, check if humidity hasn't dropped at least 2% from trigger value
+      - delay:
+          minutes: 15
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "on"
+          - condition: template
+            value_template: >
+              {{ states('sensor.max_indoor_humidity_sensor') | float(0)
+                 > (states('input_number.coordinated_trigger_humidity') | float(50) - 2) }}
+        then:
+          - service: notify.mobile_app_midnight
+            data:
+              title: "🚨 Humidity Not Clearing"
+              message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 15 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). AC cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F."
+              data:
+                push:
+                  interruption-level: critical
+          - service: system_log.write
+            data:
+              message: "Coordinated: 15-min alert. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing fast enough."
+              level: warning
+
+      # Wait another 15 minutes (30 total), if still above ON threshold, activate standalone
       - delay:
           minutes: 15
       - if:
@@ -284,13 +323,20 @@ automation:
             entity_id: sensor.max_indoor_humidity_sensor
             above: input_number.coordinated_humidity_on_threshold
         then:
+          - service: humidifier.turn_on
+            target:
+              entity_id: humidifier.151732605035846_humidifier
           - service: notify.mobile_app_midnight
             data:
-              title: "🚨 Humidity Still High"
-              message: "Humidity still at {{ states('sensor.max_indoor_humidity_sensor') }}% after 15 minutes. Currently cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F."
+              title: "🚨 Standalone Activated"
+              message: "Humidity still at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 30 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Standalone dehumidifier activated to assist."
               data:
                 push:
                   interruption-level: critical
+          - service: system_log.write
+            data:
+              message: "Coordinated: 30-min escalation. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Activated standalone dehumidifier."
+              level: warning
 
     mode: single
 
@@ -566,6 +612,11 @@ automation:
               entity_id: input_number.coordinated_previous_temp
             data:
               value: 76
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_trigger_humidity
+            data:
+              value: 0
 
           # Set schedule defaults (sun-based enabled by default)
           - service: input_boolean.turn_on
