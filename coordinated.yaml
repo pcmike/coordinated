@@ -245,12 +245,12 @@ automation:
         entity_id: input_boolean.coordinated_humidity_suppressed
         state: "off"
     action:
-      # Save current temperature
+      # Save current temperature (rounded to whole number)
       - service: input_number.set_value
         target:
           entity_id: input_number.coordinated_previous_temp
         data:
-          value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) }}"
+          value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) | round(0) }}"
 
       # Mark humidity control as active
       - service: input_boolean.turn_on
@@ -322,7 +322,7 @@ automation:
           - service: notify.mobile_app_midnight
             data:
               title: "✅ Humidity Normal"
-              message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Restored to {{ states('input_number.coordinated_previous_temp') | int }}°F."
+              message: "Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%. Restored to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
         else:
           - service: notify.mobile_app_midnight
             data:
