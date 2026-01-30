@@ -98,40 +98,12 @@ input_number:
     icon: mdi:timer-minus-outline
     # Minutes before (-) or after (+) sunset (default: -30)
 
-input_datetime:
-  coordinated_day_start:
-    name: "Day Start Time"
-    has_date: false
-    has_time: true
-    icon: mdi:weather-sunny
+  # ===========================================================================
+  # ADVANCED INPUT NUMBERS
+  # ===========================================================================
+  # WARNING: These settings are used internally by automations. Only modify
+  # if you understand the implications.
 
-  coordinated_night_start:
-    name: "Night Start Time"
-    has_date: false
-    has_time: true
-    icon: mdi:weather-night
-
-  coordinated_humidity_start_time:
-    name: "Humidity Start Time (Internal)"
-    has_date: true
-    has_time: true
-    icon: mdi:clock-start
-    # Internal tracking - timestamp when humidity control activated
-    # Used to calculate absolute alert timing across HA restarts
-
-# ==============================================================================
-# ADVANCED CONFIGURATION
-# ==============================================================================
-# WARNING: These settings are used internally by automations to determine when
-# the AC can run based on generic_thermostat tolerances. Only modify if you
-# understand the implications.
-#
-# CRITICAL: If you change hot_tolerance or cold_tolerance in the generic_thermostat
-# configuration below (currently hot_tolerance: 1.5, cold_tolerance: 0.5), you
-# MUST update these values to match. Otherwise standalone activation logic will
-# not work correctly.
-
-input_number:
   coordinated_hot_tolerance:
     name: "Hot Tolerance (Advanced)"
     min: 0.5
@@ -141,7 +113,7 @@ input_number:
     icon: mdi:thermometer-alert
     initial: 1.5
     mode: box
-    # MUST match generic_thermostat hot_tolerance setting (line 216)
+    # MUST match generic_thermostat hot_tolerance setting
     # Used to calculate when AC will actually run: temp > (target + hot_tolerance)
 
   coordinated_cold_tolerance:
@@ -153,7 +125,7 @@ input_number:
     icon: mdi:thermometer-alert
     initial: 0.5
     mode: box
-    # MUST match generic_thermostat cold_tolerance setting (line 217)
+    # MUST match generic_thermostat cold_tolerance setting
     # Currently not used in automations but provided for completeness
 
   coordinated_alert_delay_minutes:
@@ -197,6 +169,27 @@ input_number:
     # Temperature tolerance for determining if AC has reached floor temp
     # Used by Standalone Fallback automation to decide when to activate standalone
     # Default: 1.0°F means standalone activates when temp <= floor + 1°F
+
+input_datetime:
+  coordinated_day_start:
+    name: "Day Start Time"
+    has_date: false
+    has_time: true
+    icon: mdi:weather-sunny
+
+  coordinated_night_start:
+    name: "Night Start Time"
+    has_date: false
+    has_time: true
+    icon: mdi:weather-night
+
+  coordinated_humidity_start_time:
+    name: "Humidity Start Time (Internal)"
+    has_date: true
+    has_time: true
+    icon: mdi:clock-start
+    # Internal tracking - timestamp when humidity control activated
+    # Used to calculate absolute alert timing across HA restarts
 
 # ==============================================================================
 # INTERNAL STATE
