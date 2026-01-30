@@ -1,5 +1,5 @@
 # ==============================================================================
-# COORDINATED COOLER CONTROL PACKAGE v6.4
+# COORDINATED COOLER CONTROL PACKAGE v6.5
 # ==============================================================================
 #
 # A simple, elegant approach to coordinating AC and humidity control using
@@ -172,6 +172,10 @@ input_number:
     # Required humidity improvement to avoid notification
     # If humidity hasn't dropped this much from trigger value, alert is sent
     # Default: 3% drop indicates reasonable progress
+    # NOTE: This can be larger than your ON/OFF threshold gap (e.g., 49%-47%=2%).
+    # This is OK because if humidity drops below OFF threshold, humidity control
+    # exits and the alert check never runs. Alert only fires if humidity is stuck
+    # above OFF threshold without making adequate progress.
 
   coordinated_floor_temp_tolerance:
     name: "Floor Temperature Tolerance (Advanced)"
@@ -457,6 +461,17 @@ automation:
       - wait_template: "{{ is_state('input_boolean.coordinated_humidity_active', 'off') }}"
         timeout:
           seconds: 5
+
+      # Cancel any running alert timer from Humidity High automation
+      # This allows humidity control to re-trigger immediately if needed
+      - service: automation.turn_off
+        target:
+          entity_id: automation.coordinated_humidity_high
+        data:
+          stop_actions: true
+      - service: automation.turn_on
+        target:
+          entity_id: automation.coordinated_humidity_high
 
       # Turn off standalone if it was running
       - if:
