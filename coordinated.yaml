@@ -1,5 +1,5 @@
 # ==============================================================================
-# COORDINATED COOLER CONTROL PACKAGE v6.5
+# COORDINATED COOLER CONTROL PACKAGE v6.6
 # ==============================================================================
 #
 # A simple, elegant approach to coordinating AC and humidity control using
@@ -110,6 +110,14 @@ input_datetime:
     has_date: false
     has_time: true
     icon: mdi:weather-night
+
+  coordinated_humidity_start_time:
+    name: "Humidity Start Time (Internal)"
+    has_date: true
+    has_time: true
+    icon: mdi:clock-start
+    # Internal tracking - timestamp when humidity control activated
+    # Used to calculate absolute alert timing across HA restarts
 
 # ==============================================================================
 # ADVANCED CONFIGURATION
@@ -336,6 +344,21 @@ automation:
         entity_id: input_boolean.coordinated_humidity_suppressed
         state: "off"
     action:
+      # Mark humidity control as active FIRST (crash-safe: ensures state tracked even if restart during setup)
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.coordinated_humidity_active
+      - wait_template: "{{ is_state('input_boolean.coordinated_humidity_active', 'on') }}"
+        timeout:
+          seconds: 5
+
+      # Save timestamp for absolute alert timing
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.coordinated_humidity_start_time
+        data:
+          datetime: "{{ now() }}"
+
       # Save current temperature (rounded to whole number)
       - service: input_number.set_value
         target:
@@ -349,14 +372,6 @@ automation:
           entity_id: input_number.coordinated_trigger_humidity
         data:
           value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
-
-      # Mark humidity control as active
-      - service: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.coordinated_humidity_active
-      - wait_template: "{{ is_state('input_boolean.coordinated_humidity_active', 'on') }}"
-        timeout:
-          seconds: 5
 
       # Lower to floor temperature for dehumidification
       - service: climate.set_temperature
@@ -392,9 +407,17 @@ automation:
                 Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
               level: warning
 
-      # Wait configured delay, then check if humidity is clearing effectively
-      - delay:
-          minutes: "{{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}"
+      # Wait for absolute time (start + delay) to ensure consistent timing across HA restarts
+      - wait_template: >
+          {% set start = states('input_datetime.coordinated_humidity_start_time') | as_datetime %}
+          {% set delay_min = states('input_number.coordinated_alert_delay_minutes') | int(45) %}
+          {% if start %}
+            {{ (now() - start).total_seconds() / 60 >= delay_min }}
+          {% else %}
+            false
+          {% endif %}
+        timeout:
+          hours: 3
       - if:
           - condition: state
             entity_id: input_boolean.coordinated_humidity_active
@@ -904,14 +927,25 @@ automation:
                     Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
                   level: warning
             else:
-              # Temperature outside tolerance - AC can run, restart alert timer
+              # Temperature outside tolerance - AC can run, continue waiting for alert time
               - service: system_log.write
                 data:
-                  message: "Coordinated Startup: Humidity control active, restarting {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}m alert timer."
+                  message: >
+                    Coordinated Startup: Humidity control active, continuing alert timer.
+                    Started at {{ states('input_datetime.coordinated_humidity_start_time') }},
+                    will alert at {{ (states('input_datetime.coordinated_humidity_start_time') | as_datetime + timedelta(minutes=states('input_number.coordinated_alert_delay_minutes') | int(45))).strftime('%Y-%m-%d %H:%M:%S') }}.
                   level: warning
-              # Wait configured delay, then check if humidity is clearing effectively
-              - delay:
-                  minutes: "{{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}"
+              # Wait for absolute time (start + delay) to ensure consistent timing across HA restarts
+              - wait_template: >
+                  {% set start = states('input_datetime.coordinated_humidity_start_time') | as_datetime %}
+                  {% set delay_min = states('input_number.coordinated_alert_delay_minutes') | int(45) %}
+                  {% if start %}
+                    {{ (now() - start).total_seconds() / 60 >= delay_min }}
+                  {% else %}
+                    false
+                  {% endif %}
+                timeout:
+                  hours: 3
               - if:
                   - condition: state
                     entity_id: input_boolean.coordinated_humidity_active

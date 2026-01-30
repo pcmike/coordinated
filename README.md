@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v6.5
+# Coordinated Cooler Control Package v6.6
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
@@ -94,7 +94,7 @@ These settings are in the ADVANCED CONFIGURATION section and should rarely need 
 **CRITICAL:** If you change `hot_tolerance` or `cold_tolerance` in the generic_thermostat configuration, you **must** update the corresponding values above to match. The hot_tolerance value is used to determine when the AC can actually run and when standalone should activate immediately.
 
 **Note on Thresholds:**
-- **Alert delay**: Default 45 minutes gives AC and standalone adequate time to work before alerting
+- **Alert delay**: Default 45 minutes gives AC and standalone adequate time to work before alerting. Uses absolute timestamp tracking, so alerts fire at the correct time even if Home Assistant restarts during humidity control.
 - **Humidity drop**: Default 3% ensures notification only sent if meaningful progress isn't being made
 - **Floor tolerance**: Default 1.0°F determines when Standalone Fallback automation activates (when temp ≤ floor + tolerance)
 
