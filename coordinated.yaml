@@ -1,5 +1,5 @@
 # ==============================================================================
-# COORDINATED COOLER CONTROL PACKAGE v6.0
+# COORDINATED COOLER CONTROL PACKAGE v6.1
 # ==============================================================================
 #
 # A simple, elegant approach to coordinating AC and humidity control using
@@ -288,9 +288,9 @@ automation:
           message: "Coordinated: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
           level: warning
 
-      # Wait 15 minutes, check if humidity hasn't dropped at least 2% from trigger value
+      # Wait 45 minutes, then check if humidity is clearing effectively
       - delay:
-          minutes: 15
+          minutes: 45
       - if:
           - condition: state
             entity_id: input_boolean.coordinated_humidity_active
@@ -298,44 +298,20 @@ automation:
           - condition: template
             value_template: >
               {{ states('sensor.max_indoor_humidity_sensor') | float(0)
-                 > (states('input_number.coordinated_trigger_humidity') | float(50) - 2) }}
+                 > (states('input_number.coordinated_trigger_humidity') | float(50) - 3) }}
         then:
           - service: notify.mobile_app_midnight
             data:
               title: "🚨 Humidity Not Clearing"
-              message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 15 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). AC cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F."
+              message: >
+                Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 45 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%).
+                {% if is_state('switch.meross_cool_switch', 'on') and is_state('humidifier.151732605035846_humidifier', 'on') %}Both AC and standalone running{% elif is_state('humidifier.151732605035846_humidifier', 'on') %}Standalone dehumidifier running{% else %}AC cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F{% endif %} but not clearing effectively.
               data:
                 push:
                   interruption-level: critical
           - service: system_log.write
             data:
-              message: "Coordinated: 15-min alert. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing fast enough."
-              level: warning
-
-      # Wait another 15 minutes (30 total), if still above ON threshold, activate standalone
-      - delay:
-          minutes: 15
-      - if:
-          - condition: state
-            entity_id: input_boolean.coordinated_humidity_active
-            state: "on"
-          - condition: numeric_state
-            entity_id: sensor.max_indoor_humidity_sensor
-            above: input_number.coordinated_humidity_on_threshold
-        then:
-          - service: humidifier.turn_on
-            target:
-              entity_id: humidifier.151732605035846_humidifier
-          - service: notify.mobile_app_midnight
-            data:
-              title: "🚨 Standalone Activated"
-              message: "Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 30 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Standalone dehumidifier activated."
-              data:
-                push:
-                  interruption-level: critical
-          - service: system_log.write
-            data:
-              message: "Coordinated: 30-min escalation. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Activated standalone dehumidifier."
+              message: "Coordinated: 45-min alert. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
               level: warning
 
     mode: single
@@ -777,11 +753,11 @@ automation:
         then:
           - service: system_log.write
             data:
-              message: "Coordinated Startup: Humidity control active, restarting 15m/30m alert timer."
+              message: "Coordinated Startup: Humidity control active, restarting 45m alert timer."
               level: warning
-          # Wait 15 minutes, check if humidity hasn't dropped at least 2% from trigger value
+          # Wait 45 minutes, then check if humidity is clearing effectively
           - delay:
-              minutes: 15
+              minutes: 45
           - if:
               - condition: state
                 entity_id: input_boolean.coordinated_humidity_active
@@ -789,49 +765,21 @@ automation:
               - condition: template
                 value_template: >
                   {{ states('sensor.max_indoor_humidity_sensor') | float(0)
-                     > (states('input_number.coordinated_trigger_humidity') | float(50) - 2) }}
+                     > (states('input_number.coordinated_trigger_humidity') | float(50) - 3) }}
             then:
               - service: notify.mobile_app_midnight
                 data:
                   title: "🚨 Humidity Not Clearing"
                   message: >
-                    Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 15 min
-                    (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%).
-                    AC cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
+                    Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 45 min (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%).
+                    {% if is_state('switch.meross_cool_switch', 'on') and is_state('humidifier.151732605035846_humidifier', 'on') %}Both AC and standalone running{% elif is_state('humidifier.151732605035846_humidifier', 'on') %}Standalone dehumidifier running{% else %}AC cooling to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F{% endif %} but not clearing effectively.
                   data:
                     push:
                       interruption-level: critical
-          # Wait another 15 minutes (30 total), if still above ON threshold, activate standalone
-          - delay:
-              minutes: 15
-          - if:
-              - condition: state
-                entity_id: input_boolean.coordinated_humidity_active
-                state: "on"
-              - condition: numeric_state
-                entity_id: sensor.max_indoor_humidity_sensor
-                above: input_number.coordinated_humidity_on_threshold
-            then:
-              - service: humidifier.turn_on
-                target:
-                  entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: >
-                    Coordinated: Standalone dehumidifier activated (post-restart).
-                    Humidity {{ states('sensor.max_indoor_humidity_sensor') }}% still above
-                    {{ states('input_number.coordinated_humidity_on_threshold') }}% after restart + 30 min.
+                  message: "Coordinated: 45-min alert (post-restart). Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
                   level: warning
-              - service: notify.mobile_app_midnight
-                data:
-                  title: "🚨 Standalone Activated"
-                  message: >
-                    Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% after 30 min
-                    (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%).
-                    Standalone dehumidifier activated.
-                  data:
-                    push:
-                      interruption-level: critical
 
       # Log startup complete with current state
       - service: system_log.write

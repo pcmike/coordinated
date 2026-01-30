@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v1.0
+# Coordinated Cooler Control Package v6.1
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
@@ -20,7 +20,7 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 ## Features
 
 - Automatic coordination between AC and standalone dehumidifier
-- Smart humidity alerts: only notifies if humidity isn't clearing after 15 minutes
+- Smart humidity alerts: only notifies if humidity isn't clearing after 45 minutes
 - Day/night temperature scheduling with humidity-aware logic
 - Sunrise/sunset tracking with configurable offset
 - Manual override detection with suppression to prevent flapping
@@ -142,17 +142,19 @@ Update these in `coordinated.yaml` to match your setup:
 
 All events are logged at WARNING level with "Coordinated:" prefix for easy filtering.
 
-**Critical phone notifications (iOS)** are only sent in two scenarios:
+**Critical phone notifications (iOS)** are sent only when there's an actual problem:
 
-| Alert | When | Message |
-|-------|------|---------|
-| 🚨 Humidity Not Clearing | 15 min after trigger, humidity hasn't dropped 2% | "Humidity at X% after 15 min (started at Y%)" |
-| 🚨 Standalone Activated | 30 min after trigger, humidity still above ON threshold | "Humidity at X% after 30 min (started at Y%). Standalone activated" |
+| Alert | When | Message Variants |
+|-------|------|------------------|
+| 🚨 Humidity Not Clearing | 45 min after trigger, humidity hasn't dropped at least 3% | "Humidity at X% after 45 min (started at Y%). [AC cooling to 70°F / Standalone dehumidifier running / Both AC and standalone running] but not clearing effectively." |
+
+**The notification intelligently reports what's actually running** so you know the system status at a glance.
 
 **Examples:**
-- Trigger at 52%, drops to 49% in 15 min → No notification (dropped 3% ≥ 2%)
-- Trigger at 52%, still at 51% in 15 min → Notification (dropped only 1%)
-- Trigger at 52%, still at 50% in 30 min → Notification + standalone activates
+- Trigger at 52%, drops to 48% in 45 min → No notification (dropped 4% ≥ 3%)
+- Trigger at 52%, still at 50.5% in 45 min → Notification (dropped only 1.5%)
+- Standalone activates automatically at 30 seconds or 30 minutes → No notification (working as designed)
+- Humidity clears before 45 min → No notification
 
 ## License
 
