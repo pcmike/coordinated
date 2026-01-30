@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v6.2
+# Coordinated Cooler Control Package v6.3
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
@@ -79,7 +79,18 @@ All user-configurable options are at the top of `coordinated.yaml`:
 | `coordinated_day_start` | 6:00 AM | Time to switch to day temperature (when using fixed times) |
 | `coordinated_night_start` | 9:00 PM | Time to switch to night temperature (when using fixed times) |
 
-**Note:** All settings persist across Home Assistant restarts. Defaults are only applied on first installation. These can also be adjusted via the expandable settings in the dashboard card.
+### Advanced Configuration
+
+These settings are in the ADVANCED CONFIGURATION section and should rarely need modification:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `coordinated_hot_tolerance` | 1.5°F | **MUST match** `hot_tolerance` in generic_thermostat config |
+| `coordinated_cold_tolerance` | 0.5°F | **MUST match** `cold_tolerance` in generic_thermostat config |
+
+**CRITICAL:** If you change `hot_tolerance` or `cold_tolerance` in the generic_thermostat configuration, you **must** update these values to match. The hot_tolerance value is used to determine when the AC can actually run and when standalone should activate immediately.
+
+**Note:** All settings persist across Home Assistant restarts. Defaults are only applied on first installation. Standard settings can be adjusted via the expandable settings in the dashboard card, while advanced settings must be edited in YAML.
 
 ## Dashboard Cards
 

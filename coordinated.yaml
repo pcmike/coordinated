@@ -1,5 +1,5 @@
 # ==============================================================================
-# COORDINATED COOLER CONTROL PACKAGE v6.2
+# COORDINATED COOLER CONTROL PACKAGE v6.3
 # ==============================================================================
 #
 # A simple, elegant approach to coordinating AC and humidity control using
@@ -112,6 +112,43 @@ input_datetime:
     icon: mdi:weather-night
 
 # ==============================================================================
+# ADVANCED CONFIGURATION
+# ==============================================================================
+# WARNING: These settings are used internally by automations to determine when
+# the AC can run based on generic_thermostat tolerances. Only modify if you
+# understand the implications.
+#
+# CRITICAL: If you change hot_tolerance or cold_tolerance in the generic_thermostat
+# configuration below (currently hot_tolerance: 1.5, cold_tolerance: 0.5), you
+# MUST update these values to match. Otherwise standalone activation logic will
+# not work correctly.
+
+input_number:
+  coordinated_hot_tolerance:
+    name: "Hot Tolerance (Advanced)"
+    min: 0.5
+    max: 3.0
+    step: 0.5
+    unit_of_measurement: "°F"
+    icon: mdi:thermometer-alert
+    initial: 1.5
+    mode: box
+    # MUST match generic_thermostat hot_tolerance setting (line 216)
+    # Used to calculate when AC will actually run: temp > (target + hot_tolerance)
+
+  coordinated_cold_tolerance:
+    name: "Cold Tolerance (Advanced)"
+    min: 0.5
+    max: 3.0
+    step: 0.5
+    unit_of_measurement: "°F"
+    icon: mdi:thermometer-alert
+    initial: 0.5
+    mode: box
+    # MUST match generic_thermostat cold_tolerance setting (line 217)
+    # Currently not used in automations but provided for completeness
+
+# ==============================================================================
 # INTERNAL STATE
 # ==============================================================================
 
@@ -201,6 +238,10 @@ template:
 # ==============================================================================
 # CLIMATE - GENERIC THERMOSTAT
 # ==============================================================================
+# WARNING: If you change hot_tolerance or cold_tolerance below, you MUST also
+# update coordinated_hot_tolerance and coordinated_cold_tolerance in the
+# ADVANCED CONFIGURATION section above to match. These values are used by
+# automations to determine when standalone dehumidifier should activate.
 
 climate:
   - platform: generic_thermostat
@@ -213,8 +254,8 @@ climate:
     min_temp: 65
     max_temp: 85
     target_temp: 76
-    hot_tolerance: 1.5
-    cold_tolerance: 0.5
+    hot_tolerance: 1.5  # MUST match coordinated_hot_tolerance above
+    cold_tolerance: 0.5  # MUST match coordinated_cold_tolerance above
     min_cycle_duration:
       minutes: 15
     away_temp: 78
@@ -295,7 +336,7 @@ automation:
           - condition: template
             value_template: >
               {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(999)
-                 <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + 1.5) }}
+                 <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) }}
         then:
           - service: humidifier.turn_on
             target:
@@ -304,8 +345,8 @@ automation:
             data:
               message: >
                 Coordinated: Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
-                is within hot_tolerance (1.5°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
-                AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + 1.5) | round(1) }}°F.
+                is within hot_tolerance ({{ states('input_number.coordinated_hot_tolerance') | float(1.5) }}°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
+                AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F.
                 Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
               level: warning
 
@@ -795,7 +836,7 @@ automation:
               - condition: template
                 value_template: >
                   {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(999)
-                     <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + 1.5) }}
+                     <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) }}
             then:
               # Temperature within tolerance - activate standalone immediately
               - service: humidifier.turn_on
@@ -805,8 +846,8 @@ automation:
                 data:
                   message: >
                     Coordinated Startup: Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
-                    is within hot_tolerance (1.5°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
-                    AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + 1.5) | round(1) }}°F.
+                    is within hot_tolerance ({{ states('input_number.coordinated_hot_tolerance') | float(1.5) }}°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
+                    AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F.
                     Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
                   level: warning
             else:
