@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v6.6
+# Coordinated Cooler Control Package v6.7
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
@@ -179,6 +179,61 @@ All events are logged at WARNING level with "Coordinated:" prefix for easy filte
 - Trigger at 52%, still at 50.5% in 45 min → Notification (dropped only 1.5%)
 - Standalone activates automatically at 30 seconds or 30 minutes → No notification (working as designed)
 - Humidity clears before 45 min → No notification
+
+## Known Edge Cases
+
+The following edge cases have been identified but are considered low priority and unlikely to cause issues in normal operation:
+
+### 1. Manual Override During Humidity Exit
+**Scenario:** If you manually change temperature at the exact moment humidity drops below OFF threshold, the Manual Override automation might not fire because `humidity_active` has already turned off.
+
+**Impact:** Your manual preference won't be remembered, and humidity control will re-activate on the next humidity event.
+
+**Workaround:** Manually change temperature before or after humidity clears, not during the transition.
+
+**Likelihood:** Rare - requires exact timing within a few seconds.
+
+---
+
+### 2. Standalone Activation Delay Variability
+**Scenario:** The Standalone Fallback automation has two triggers (AC turns off, humidity activates). If both fire simultaneously, the activation delay can vary from 0-30 seconds depending on which trigger processes first.
+
+**Impact:** Unpredictable delay in standalone activation.
+
+**Likelihood:** Rare - usually the AC turn-off trigger wins.
+
+---
+
+### 3. State Confirmation Timeout Under Heavy Load
+**Scenario:** When toggling boolean flags, the system waits 5 seconds for state confirmation. If Home Assistant is extremely overloaded, the wait might timeout and continue with potentially stale state.
+
+**Impact:** Temporary state inconsistency that typically self-corrects within seconds.
+
+**Likelihood:** Very rare - only when HA is severely overloaded.
+
+---
+
+### 4. Temperature Attribute Staleness
+**Scenario:** The tolerance check reads `climate.coordinated_thermostat.current_temperature`, which updates asynchronously from the sensor. If humidity control triggers during a sensor update, the check might use a stale value.
+
+**Impact:** Standalone might activate unnecessarily when AC could have run, or vice versa.
+
+**Likelihood:** Uncommon - requires trigger exactly during sensor update (< 1 second window).
+
+---
+
+### 5. Suppression Flag Doesn't Persist Across Events
+**Scenario:** When you manually override during humidity control, the suppression flag clears as soon as humidity drops below OFF threshold. Your preference isn't remembered for future humidity events.
+
+**Impact:** You need to manually override every time humidity rises if you don't want automatic control.
+
+**Workaround:** Disable humidity control entirely via the dashboard if you want permanent manual control.
+
+**Likelihood:** Medium - depends on how frequently you use manual override.
+
+---
+
+These edge cases are documented for transparency but are not expected to significantly impact normal operation. If you encounter any of these issues frequently, please report them at https://github.com/anthropics/claude-code/issues.
 
 ## License
 
