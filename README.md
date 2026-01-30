@@ -233,7 +233,7 @@ The following edge cases have been identified but are considered low priority an
 
 ---
 
-These edge cases are documented for transparency but are not expected to significantly impact normal operation. If you encounter any of these issues frequently, please report them at https://github.com/anthropics/claude-code/issues.
+These edge cases are documented for transparency but are not expected to significantly impact normal operation.
 
 ## License
 
