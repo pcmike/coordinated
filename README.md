@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v6.3
+# Coordinated Cooler Control Package v6.4
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
@@ -83,12 +83,20 @@ All user-configurable options are at the top of `coordinated.yaml`:
 
 These settings are in the ADVANCED CONFIGURATION section and should rarely need modification:
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `coordinated_hot_tolerance` | 1.5°F | **MUST match** `hot_tolerance` in generic_thermostat config |
-| `coordinated_cold_tolerance` | 0.5°F | **MUST match** `cold_tolerance` in generic_thermostat config |
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| `coordinated_hot_tolerance` | 1.5°F | 0.5-3.0°F | **MUST match** `hot_tolerance` in generic_thermostat config |
+| `coordinated_cold_tolerance` | 0.5°F | 0.5-3.0°F | **MUST match** `cold_tolerance` in generic_thermostat config |
+| `coordinated_alert_delay_minutes` | 45 min | 15-120 min | Time to wait before sending notification if humidity not clearing |
+| `coordinated_alert_humidity_drop_threshold` | 3% | 1-10% | Required humidity drop to avoid alert (must drop this much from trigger value) |
+| `coordinated_floor_temp_tolerance` | 1.0°F | 0.5-3.0°F | Temperature tolerance for determining if AC has reached floor temp |
 
-**CRITICAL:** If you change `hot_tolerance` or `cold_tolerance` in the generic_thermostat configuration, you **must** update these values to match. The hot_tolerance value is used to determine when the AC can actually run and when standalone should activate immediately.
+**CRITICAL:** If you change `hot_tolerance` or `cold_tolerance` in the generic_thermostat configuration, you **must** update the corresponding values above to match. The hot_tolerance value is used to determine when the AC can actually run and when standalone should activate immediately.
+
+**Note on Thresholds:**
+- **Alert delay**: Default 45 minutes gives AC and standalone adequate time to work before alerting
+- **Humidity drop**: Default 3% ensures notification only sent if meaningful progress isn't being made
+- **Floor tolerance**: Default 1.0°F determines when Standalone Fallback automation activates (when temp ≤ floor + tolerance)
 
 **Note:** All settings persist across Home Assistant restarts. Defaults are only applied on first installation. Standard settings can be adjusted via the expandable settings in the dashboard card, while advanced settings must be edited in YAML.
 
