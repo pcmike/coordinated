@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v6.1
+# Coordinated Cooler Control Package v6.2
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
@@ -7,7 +7,10 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 ### Humidity Control
 1. **Normal operation**: Thermostat runs at your chosen temperature
 2. **High humidity (>49%)**: Lowers to floor temperature (default 70°F) to dehumidify using AC
-3. **AC can't clear humidity**: If temperature reaches floor but humidity persists, standalone dehumidifier activates
+3. **Smart standalone activation**: Standalone dehumidifier activates when:
+   - Temperature is within tolerance band (AC won't run) → **activates immediately**
+   - AC runs but reaches floor temp and humidity persists → activates when AC cycles off
+   - 45-minute failsafe if still not running and humidity hasn't cleared
 4. **Humidity normal (<47%)**: Returns to previous temperature, turns off standalone dehumidifier
 
 ### Day/Night Scheduling
@@ -127,12 +130,14 @@ Update these in `coordinated.yaml` to match your setup:
 ## Automations
 
 ### Humidity Control
-1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold
+1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold, with intelligent standalone activation:
+   - Immediately activates standalone if temperature is within tolerance band (AC won't run)
+   - 45-minute failsafe notification and standalone activation if humidity not clearing
 2. **Humidity Normal**: Exits dehumidification mode when humidity drops below OFF threshold
 3. **Standalone Fallback**: Activates standalone dehumidifier when AC reaches floor temp but humidity persists
 4. **Manual Override**: Detects manual changes and exits humidity mode with suppression
 5. **Clear Suppression**: Re-enables humidity control after humidity drops below threshold
-6. **Startup Sync**: Synchronizes state after Home Assistant restart, including setting correct day/night temperature based on schedule
+6. **Startup Sync**: Synchronizes state after Home Assistant restart, including setting correct day/night temperature based on schedule and checking if standalone should be running
 
 ### Day/Night Schedule
 7. **Day Mode**: Switches to day temperature at scheduled time or sunrise (skips if humidity control active)
