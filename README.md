@@ -1,4 +1,4 @@
-# Coordinated Cooler Control Package v6.7
+# Coordinated Cooler Control Package v6.8
 
 A Home Assistant package that coordinates AC and standalone dehumidifier control based on humidity levels.
 
