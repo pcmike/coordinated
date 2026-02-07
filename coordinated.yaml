@@ -402,7 +402,7 @@ automation:
 
       # Wait for absolute time (start + delay) to ensure consistent timing across HA restarts
       - wait_template: >
-          {% set start = states('input_datetime.coordinated_humidity_start_time') | as_datetime %}
+          {% set start = states('input_datetime.coordinated_humidity_start_time') | as_datetime | as_local %}
           {% set delay_min = states('input_number.coordinated_alert_delay_minutes') | int(45) %}
           {% if start %}
             {{ (now() - start).total_seconds() / 60 >= delay_min }}
@@ -482,12 +482,12 @@ automation:
       # This allows humidity control to re-trigger immediately if needed
       - service: automation.turn_off
         target:
-          entity_id: automation.coordinated_humidity_high
+          entity_id: automation.coordinated_humidity_high_activate_dehumidification
         data:
           stop_actions: true
       - service: automation.turn_on
         target:
-          entity_id: automation.coordinated_humidity_high
+          entity_id: automation.coordinated_humidity_high_activate_dehumidification
 
       # Turn off standalone if it was running
       - if:
@@ -649,6 +649,10 @@ automation:
                 value_template: >
                   {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(999)
                      <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_floor_temp_tolerance') | float(1.0)) }}
+              # Only activate standalone if not already running (prevents duplicate log from Humidity High automation)
+              - condition: state
+                entity_id: humidifier.151732605035846_humidifier
+                state: "off"
               # All conditions passed - room is at floor temp but AC can't help more
               - service: humidifier.turn_on
                 target:
@@ -969,7 +973,7 @@ automation:
               - service: system_log.write
                 data:
                   message: >
-                    Coordinated Startup: Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
+                    Coordinated Startup: Humidity control was active after restart. Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
                     is within hot_tolerance ({{ states('input_number.coordinated_hot_tolerance') | float(1.5) }}°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
                     AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F.
                     Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
@@ -981,11 +985,11 @@ automation:
                   message: >
                     Coordinated Startup: Humidity control active, continuing alert timer.
                     Started at {{ states('input_datetime.coordinated_humidity_start_time') }},
-                    will alert at {{ (states('input_datetime.coordinated_humidity_start_time') | as_datetime + timedelta(minutes=states('input_number.coordinated_alert_delay_minutes') | int(45))).strftime('%Y-%m-%d %H:%M:%S') }}.
+                    will alert at {{ (states('input_datetime.coordinated_humidity_start_time') | as_datetime | as_local + timedelta(minutes=states('input_number.coordinated_alert_delay_minutes') | int(45))).strftime('%Y-%m-%d %H:%M:%S') }}.
                   level: warning
               # Wait for absolute time (start + delay) to ensure consistent timing across HA restarts
               - wait_template: >
-                  {% set start = states('input_datetime.coordinated_humidity_start_time') | as_datetime %}
+                  {% set start = states('input_datetime.coordinated_humidity_start_time') | as_datetime | as_local %}
                   {% set delay_min = states('input_number.coordinated_alert_delay_minutes') | int(45) %}
                   {% if start %}
                     {{ (now() - start).total_seconds() / 60 >= delay_min }}
