@@ -233,6 +233,34 @@ The following edge cases have been identified but are considered low priority an
 
 ---
 
+### 6. Manual Heating During Unusually Cold Weather
+**Scenario:** During rare cold weather (e.g., Florida freeze), you manually set your physical thermostat to heat mode to maintain comfort. When the house warms up or humidity spikes, coordinated control will override your heat setting by switching the physical thermostat to cool mode.
+
+**What Happens:**
+1. You manually set physical thermostat to heat @ 78°F
+2. House warms up or humidity rises
+3. Coordinated switches physical thermostat from heat to cool mode
+4. After cooling/dehumidifying, physical thermostat turns OFF (doesn't return to heat)
+5. You need to manually set it back to heat if still needed
+
+**Why This Is Actually Helpful:**
+This behavior provides automatic recovery to normal operation. When weather warms back up, coordinated automatically takes control and returns the system to normal cooling operation without requiring manual intervention to "turn off" your temporary heat setting.
+
+**Workaround for Extended Cold Weather:**
+- Disable humidity control via dashboard if you need heat for multiple days
+- Manually manage the physical thermostat
+- Re-enable humidity control when weather returns to normal
+
+**Alternative for Humidity During Cold Weather:**
+If humidity rises when the house is too cold to run AC (below 70°F floor temp), only the standalone dehumidifier will run. This is expected behavior - AC-based dehumidification requires the house to be warm enough to cool.
+
+**Note on Heat and Humidity:**
+Running heat will lower relative humidity percentage on sensors (because warm air holds more moisture), but it doesn't actually remove moisture from the air. Only cooling (AC) or the standalone dehumidifier physically remove moisture. When heat turns off and the house cools, humidity percentage will rise back to previous levels.
+
+**Likelihood:** Very rare - only during unusually cold weather in warm climates.
+
+---
+
 These edge cases are documented for transparency but are not expected to significantly impact normal operation.
 
 ## License
