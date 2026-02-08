@@ -176,11 +176,12 @@ script:
           # Set generic thermostat to high target to prevent AC/heat conflict
           # Target = heat_target + (2 × hot_tolerance) = 80 + (2 × 1.5) = 83°F
           # This prevents generic thermostat from trying to cool while heating
+          # NOTE: Reads hot_tolerance dynamically, but heat_target is hardcoded (80)
           - service: climate.set_temperature
             target:
               entity_id: climate.coordinated_thermostat
             data:
-              temperature: "{{ *heat_target + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) }}"
+              temperature: "{{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) }}"
 
           # Set physical thermostat to heat mode
           - service: climate.set_temperature
@@ -197,7 +198,7 @@ script:
           # Log activation
           - service: system_log.write
             data:
-              message: "Quick Heat: Activated heat @ 80°F. Set generic thermostat to {{ *heat_target + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict. Humidity control will use standalone only."
+              message: "Quick Heat: Activated heat @ 80°F. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict. Humidity control will use standalone only."
               level: warning
 
 # ==============================================================================
