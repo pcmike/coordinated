@@ -983,7 +983,22 @@ automation:
               message: "Coordinated Startup: Quick Heat active and humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only (AC won't interfere)."
               level: warning
 
-      # Sync temperature based on schedule (if enabled and humidity control not active)
+      # Restore generic thermostat target if Quick Heat is active
+      - if:
+          - condition: template
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'on' }}"
+        then:
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: "{{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) }}"
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: Quick Heat active. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict."
+              level: warning
+
+      # Sync temperature based on schedule (if enabled and humidity control not active and Quick Heat not active)
       - if:
           - condition: state
             entity_id: input_boolean.coordinated_schedule_enabled
@@ -991,6 +1006,8 @@ automation:
           - condition: state
             entity_id: input_boolean.coordinated_humidity_active
             state: "off"
+          - condition: template
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
         then:
           - service: climate.set_temperature
             target:
@@ -1154,6 +1171,9 @@ automation:
       - condition: state
         entity_id: input_boolean.coordinated_humidity_active
         state: "off"
+      # And Quick Heat is not active
+      - condition: template
+        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
     action:
       - service: climate.set_temperature
         target:
@@ -1190,6 +1210,9 @@ automation:
       - condition: state
         entity_id: input_boolean.coordinated_humidity_active
         state: "off"
+      # And Quick Heat is not active
+      - condition: template
+        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
     action:
       - service: climate.set_temperature
         target:
