@@ -910,6 +910,79 @@ automation:
               message: "Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Cleared suppression."
               level: warning
 
+      # Handle Quick Heat + humidity control state inconsistencies
+      # Case 1: Quick Heat ON + humidity_active ON = inconsistent (Quick Heat should have exited)
+      - if:
+          - condition: template
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'on' }}"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "on"
+        then:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.coordinated_humidity_active
+          - if:
+              - condition: state
+                entity_id: humidifier.151732605035846_humidifier
+                state: "on"
+            then:
+              - service: humidifier.turn_off
+                target:
+                  entity_id: humidifier.151732605035846_humidifier
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: Inconsistent state detected - Quick Heat ON but humidity_active also ON. Turned OFF humidity_active (Quick Heat takes precedence)."
+              level: warning
+
+      # Case 2: Quick Heat ON + humidity HIGH + humidity_active OFF = need to activate standalone
+      - if:
+          - condition: template
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'on' }}"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_enabled
+            state: "on"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "off"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_suppressed
+            state: "off"
+          - condition: numeric_state
+            entity_id: sensor.max_indoor_humidity_sensor
+            above: input_number.coordinated_humidity_on_threshold
+        then:
+          # Activate humidity control
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_humidity_active
+          # Save timestamp for absolute alert timing
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.coordinated_humidity_start_time
+            data:
+              datetime: "{{ now() }}"
+          # Save current temperature
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_previous_temp
+            data:
+              value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) | round(0) }}"
+          # Save triggering humidity value
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_trigger_humidity
+            data:
+              value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
+          # Activate standalone only (Quick Heat is on, don't use AC)
+          - service: humidifier.turn_on
+            target:
+              entity_id: humidifier.151732605035846_humidifier
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: Quick Heat active and humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only (AC won't interfere)."
+              level: warning
+
       # Sync temperature based on schedule (if enabled and humidity control not active)
       - if:
           - condition: state
