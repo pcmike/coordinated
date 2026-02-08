@@ -10,7 +10,7 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 3. **Smart standalone activation**: Standalone dehumidifier activates when:
    - Temperature is within tolerance band (AC won't run) → **activates immediately**
    - AC runs but reaches floor temp and humidity persists → activates when AC cycles off
-   - 45-minute failsafe if still not running and humidity hasn't cleared
+   - 60-minute failsafe if still not running and humidity hasn't cleared
 4. **Humidity normal (<47%)**: Returns to previous temperature, turns off standalone dehumidifier
 
 ### Day/Night Scheduling
@@ -34,7 +34,7 @@ This is ideal for unusual cold weather in warm climates (e.g., Florida freeze) w
 ## Features
 
 - Automatic coordination between AC and standalone dehumidifier
-- Smart humidity alerts: only notifies if humidity isn't clearing after 45 minutes
+- Smart humidity alerts: only notifies if humidity isn't clearing after 60 minutes
 - Day/night temperature scheduling with humidity-aware logic
 - Sunrise/sunset tracking with configurable offset
 - Manual override detection with suppression to prevent flapping
@@ -131,14 +131,14 @@ These settings are in the ADVANCED CONFIGURATION section and should rarely need 
 |---------|---------|-------|-------------|
 | `coordinated_hot_tolerance` | 1.5°F | 0.5-3.0°F | **MUST match** `hot_tolerance` in generic_thermostat config |
 | `coordinated_cold_tolerance` | 0.5°F | 0.5-3.0°F | **MUST match** `cold_tolerance` in generic_thermostat config |
-| `coordinated_alert_delay_minutes` | 45 min | 15-120 min | Time to wait before sending notification if humidity not clearing |
+| `coordinated_alert_delay_minutes` | 60 min | 15-120 min | Time to wait before sending notification if humidity not clearing |
 | `coordinated_alert_humidity_drop_threshold` | 3% | 1-10% | Required humidity drop to avoid alert (must drop this much from trigger value) |
 | `coordinated_floor_temp_tolerance` | 1.0°F | 0.5-3.0°F | Temperature tolerance for determining if AC has reached floor temp |
 
 **CRITICAL:** If you change `hot_tolerance` or `cold_tolerance` in the generic_thermostat configuration, you **must** update the corresponding values above to match. The hot_tolerance value is used to determine when the AC can actually run and when standalone should activate immediately.
 
 **Note on Thresholds:**
-- **Alert delay**: Default 45 minutes gives AC and standalone adequate time to work before alerting. Uses absolute timestamp tracking, so alerts fire at the correct time even if Home Assistant restarts during humidity control.
+- **Alert delay**: Default 60 minutes gives AC and standalone adequate time to work before alerting. Uses absolute timestamp tracking, so alerts fire at the correct time even if Home Assistant restarts during humidity control.
 - **Humidity drop**: Default 3% ensures notification only sent if meaningful progress isn't being made
 - **Floor tolerance**: Default 1.0°F determines when Standalone Fallback automation activates (when temp ≤ floor + tolerance)
 
@@ -234,7 +234,7 @@ Update these in `coordinated.yaml` to match your setup:
 ### Humidity Control
 1. **Humidity High**: Triggers dehumidification mode when humidity exceeds ON threshold, with intelligent standalone activation:
    - Immediately activates standalone if temperature is within tolerance band (AC won't run)
-   - 45-minute failsafe notification and standalone activation if humidity not clearing
+   - 60-minute failsafe notification and standalone activation if humidity not clearing
 2. **Humidity Normal**: Exits dehumidification mode when humidity drops below OFF threshold
 3. **Standalone Fallback**: Activates standalone dehumidifier when AC reaches floor temp but humidity persists
 4. **Manual Override**: Detects manual changes and exits humidity mode with suppression
@@ -253,15 +253,15 @@ All events are logged at WARNING level with "Coordinated:" prefix for easy filte
 
 | Alert | When | Message Variants |
 |-------|------|------------------|
-| 🚨 Humidity Not Clearing | 45 min after trigger, humidity hasn't dropped at least 3% | "Humidity at X% after 45 min (started at Y%). [AC cooling to 70°F / Standalone dehumidifier running / Both AC and standalone running] but not clearing effectively." |
+| 🚨 Humidity Not Clearing | 60 min after trigger, humidity hasn't dropped at least 3% | "Humidity at X% after 60 min (started at Y%). [AC cooling to 70°F / Standalone dehumidifier running / Both AC and standalone running] but not clearing effectively." |
 
 **The notification intelligently reports what's actually running** so you know the system status at a glance.
 
 **Examples:**
-- Trigger at 52%, drops to 48% in 45 min → No notification (dropped 4% ≥ 3%)
-- Trigger at 52%, still at 50.5% in 45 min → Notification (dropped only 1.5%)
+- Trigger at 52%, drops to 48% in 60 min → No notification (dropped 4% ≥ 3%)
+- Trigger at 52%, still at 50.5% in 60 min → Notification (dropped only 1.5%)
 - Standalone activates automatically at 30 seconds or 30 minutes → No notification (working as designed)
-- Humidity clears before 45 min → No notification
+- Humidity clears before 60 min → No notification
 
 ## Known Edge Cases
 

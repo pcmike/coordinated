@@ -135,7 +135,7 @@ input_number:
     step: 5
     unit_of_measurement: "min"
     icon: mdi:timer-outline
-    initial: 45
+    initial: 60
     mode: box
     # Time to wait before sending notification if humidity not clearing
     # Default: 45 minutes gives AC and standalone adequate time to work
@@ -1106,6 +1106,12 @@ automation:
                 Coordinated Startup: Set temperature to {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F ({{ 'day' if is_day else 'night' }} mode).
               level: warning
 
+      # Log startup complete with current state
+      - service: system_log.write
+        data:
+          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}, Quick Heat: {{ states('input_boolean.coordinated_quick_heat_active') }}"
+          level: warning
+
       # If humidity control is active but standalone hasn't been activated yet,
       # check if standalone should run immediately or restart alert timer
       - if:
@@ -1195,12 +1201,6 @@ automation:
                     data:
                       message: "Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min alert (post-restart). Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
                       level: warning
-
-      # Log startup complete with current state
-      - service: system_log.write
-        data:
-          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}, Quick Heat: {{ states('input_boolean.coordinated_quick_heat_active') }}"
-          level: warning
     mode: single
 
   # ============================================================================
