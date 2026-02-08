@@ -270,6 +270,119 @@ automation:
           level: warning
     mode: single
 
+  # ============================================================================
+  # Auto-Disable Quick Heat When Target Reached
+  # ============================================================================
+  - id: coordinated_quick_heat_auto_disable
+    alias: "Coordinated: Quick Heat Auto-Disable"
+    description: "Turn off Quick Heat when physical thermostat reaches target"
+    trigger:
+      - platform: state
+        entity_id: climate.smart_thermostat
+        attribute: hvac_action
+        to: "idle"
+    condition:
+      - condition: state
+        entity_id: input_boolean.coordinated_quick_heat_active
+        state: "on"
+      # Ensure climate is still in heat mode (not manually changed to off/cool)
+      # NOTE: Update this entity to match your climate_entity above
+      - condition: state
+        entity_id: climate.smart_thermostat
+        state: "heat"
+    action:
+      # Wait 3 minutes to ensure it's stable at target, not just cycling
+      - delay:
+          minutes: 3
+      # Re-check conditions after delay
+      - condition: state
+        entity_id: input_boolean.coordinated_quick_heat_active
+        state: "on"
+      - condition: state
+        entity_id: climate.smart_thermostat
+        state: "heat"
+      - condition: state
+        entity_id: climate.smart_thermostat
+        attribute: hvac_action
+        state: "idle"
+
+      # Turn off physical thermostat
+      - service: climate.turn_off
+        target:
+          entity_id: climate.smart_thermostat
+
+      # Restore generic thermostat target
+      # Check if day/night schedule should be used
+      - if:
+          - condition: state
+            entity_id: input_boolean.coordinated_schedule_enabled
+            state: "on"
+        then:
+          # Apply day or night temp based on current time
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: >
+                {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
+                {% set now_time = now() %}
+                {% if use_sun %}
+                  {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+                  {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+                  {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
+                  {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
+                  {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+                  {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+                  {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
+                  {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
+                {% else %}
+                  {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
+                  {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
+                {% endif %}
+                {% if day_start <= now_time < night_start %}
+                  {{ states('input_number.coordinated_day_temp') | float(76) }}
+                {% else %}
+                  {{ states('input_number.coordinated_night_temp') | float(73) }}
+                {% endif %}
+          - service: system_log.write
+            data:
+              message: >
+                {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
+                {% set now_time = now() %}
+                {% if use_sun %}
+                  {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+                  {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+                  {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
+                  {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
+                  {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+                  {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+                  {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
+                  {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
+                {% else %}
+                  {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
+                  {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
+                {% endif %}
+                {% set is_day = day_start <= now_time < night_start %}
+                Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
+              level: warning
+        else:
+          # No schedule, restore to previous temp
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
+          - service: system_log.write
+            data:
+              message: "Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
+              level: warning
+
+      # Clear Quick Heat flag
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_quick_heat_active
+    mode: single
+
 # ==============================================================================
 # END OF PACKAGE
 # ==============================================================================
