@@ -1059,7 +1059,7 @@ automation:
       # Log startup complete with current state
       - service: system_log.write
         data:
-          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}"
+          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}, Quick Heat: {{ states('input_boolean.coordinated_quick_heat_active') }}"
           level: warning
     mode: single
 
