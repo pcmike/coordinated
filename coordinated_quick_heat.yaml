@@ -277,10 +277,11 @@ automation:
     alias: "Coordinated: Quick Heat Auto-Disable"
     description: "Turn off Quick Heat when physical thermostat reaches target"
     trigger:
-      - platform: state
-        entity_id: climate.smart_thermostat
-        attribute: hvac_action
-        to: "idle"
+      # Trigger when current temp reaches or exceeds target temp
+      - platform: template
+        value_template: "{{ state_attr('climate.smart_thermostat', 'current_temperature') | float(0) >= state_attr('climate.smart_thermostat', 'temperature') | float(999) }}"
+        for:
+          minutes: 2
     condition:
       - condition: state
         entity_id: input_boolean.coordinated_quick_heat_active
@@ -291,20 +292,15 @@ automation:
         entity_id: climate.smart_thermostat
         state: "heat"
     action:
-      # Wait 3 minutes to ensure it's stable at target, not just cycling
-      - delay:
-          minutes: 3
-      # Re-check conditions after delay
+      # Re-check that we're still at/above target after trigger
+      - condition: template
+        value_template: "{{ state_attr('climate.smart_thermostat', 'current_temperature') | float(0) >= state_attr('climate.smart_thermostat', 'temperature') | float(999) }}"
       - condition: state
         entity_id: input_boolean.coordinated_quick_heat_active
         state: "on"
       - condition: state
         entity_id: climate.smart_thermostat
         state: "heat"
-      - condition: state
-        entity_id: climate.smart_thermostat
-        attribute: hvac_action
-        state: "idle"
 
       # Turn off physical thermostat
       - service: climate.turn_off
