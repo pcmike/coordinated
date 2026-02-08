@@ -29,8 +29,16 @@
 # ==============================================================================
 # IMPORTANT: Update these settings to match your thermostat
 #
-# The climate_entity anchor (*climate_entity) is used in most places, but
-# templates in strings (line 106) require manual update to match.
+# climate_entity: Change this to your physical thermostat entity
+#   - Also update line 127 (template condition)
+#
+# heat_target: Change this to your desired heat temperature (default 80°F)
+#   - Also update line 107 (generic thermostat calculation)
+#   - Also update line 118 (log message calculation)
+#   - Search for "80" in this file to find all instances
+#
+# Note: YAML anchors (*climate_entity, *heat_target) work in most places,
+# but Jinja templates in strings require hardcoded values.
 
 homeassistant:
   customize:
