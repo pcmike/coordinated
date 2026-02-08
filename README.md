@@ -26,8 +26,8 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 2. **Smart humidity handling**: When Quick Heat is active and humidity rises:
    - **Only standalone dehumidifier runs** (AC won't interfere with your heat)
    - Prevents coordinated from switching your heat to cool mode
-   - Still manages extreme humidity without sacrificing comfort
-3. **Auto-recovery**: When Quick Heat turns off or humidity normalizes, coordinated resumes normal operation
+   - When humidity normalizes, standalone stops but Quick Heat continues heating
+3. **Auto-recovery**: When Quick Heat turns off (button press or target reached), coordinated resumes normal operation
 
 This is ideal for unusual cold weather in warm climates (e.g., Florida freeze) where you need temporary heat but still want humidity protection. Default is 80°F because physical thermostats often read differently than separate temperature sensors.
 
