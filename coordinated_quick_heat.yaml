@@ -127,3 +127,43 @@ automation:
 # ==============================================================================
 # END OF PACKAGE
 # ==============================================================================
+
+# ==============================================================================
+# DASHBOARD CARD - Quick Heat Button
+# ==============================================================================
+# Add this Mushroom template card to your Home Assistant dashboard.
+# Update 'climate.smart_thermostat' to match your climate entity.
+#
+# Copy the YAML below (without the # comment markers):
+# ------------------------------------------------------------------------------
+#
+# type: custom:mushroom-template-card
+# primary: Quick Heat
+# secondary: |-
+#   {% if is_state('climate.smart_thermostat', 'heat') %}
+#     Heating to {{ state_attr('climate.smart_thermostat', 'temperature') }}°F
+#   {% elif is_state('climate.smart_thermostat', 'off') %}
+#     Off
+#   {% else %}
+#     {{ states('climate.smart_thermostat') | title }}
+#   {% endif %}
+# icon: mdi:fire
+# icon_color: |-
+#   {% if is_state('climate.smart_thermostat', 'heat') %}
+#     deep-orange
+#   {% else %}
+#     grey
+#   {% endif %}
+# tap_action:
+#   action: call-service
+#   service: script.toggle_mts300_to_heat
+# hold_action:
+#   action: more-info
+#
+# ------------------------------------------------------------------------------
+# How it works:
+# - Tap: Toggles between heat @ 80°F (or your configured value) and off
+# - Icon: Fire icon, orange when heating, grey when off
+# - Long press: Opens climate entity for manual control
+# - When heating + humidity rises: Only standalone dehumidifier runs (AC won't interfere)
+# ==============================================================================
