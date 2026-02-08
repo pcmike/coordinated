@@ -998,6 +998,56 @@ automation:
               message: "Coordinated Startup: Quick Heat active. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict."
               level: warning
 
+      # Case 3: Quick Heat OFF + humidity HIGH + humidity_active OFF = activate normal humidity control
+      - if:
+          - condition: template
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_enabled
+            state: "on"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_active
+            state: "off"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_suppressed
+            state: "off"
+          - condition: numeric_state
+            entity_id: sensor.max_indoor_humidity_sensor
+            above: input_number.coordinated_humidity_on_threshold
+        then:
+          # Activate humidity control
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_humidity_active
+          # Save timestamp for absolute alert timing
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.coordinated_humidity_start_time
+            data:
+              datetime: "{{ now() }}"
+          # Save current temperature (will be overridden below, but need to store for manual override)
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_previous_temp
+            data:
+              value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) | round(0) }}"
+          # Save triggering humidity value
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_trigger_humidity
+            data:
+              value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
+          # Cool to floor temp (normal humidity control)
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
+          - service: system_log.write
+            data:
+              message: "Coordinated Startup: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated normal humidity control (AC to floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F)."
+              level: warning
+
       # Sync temperature based on schedule (if enabled and humidity control not active and Quick Heat not active)
       - if:
           - condition: state
