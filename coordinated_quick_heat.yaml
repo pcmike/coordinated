@@ -1,0 +1,129 @@
+# ==============================================================================
+# COORDINATED QUICK HEAT PACKAGE
+# ==============================================================================
+#
+# Optional add-on for Coordinated Cooler Control that provides a manual "Quick
+# Heat" button for rare cold weather situations.
+#
+# FEATURES:
+#   - One-button toggle: Heat @ 78°F or Off
+#   - Smart humidity handling: When Quick Heat is active, only standalone
+#     dehumidifier runs (AC won't override your heat setting)
+#   - Auto-recovery: When Quick Heat turns off or humidity clears, normal
+#     coordinated control resumes
+#
+# INSTALLATION:
+#   1. Copy this file to your Home Assistant packages directory
+#   2. Add to configuration.yaml:
+#      homeassistant:
+#        packages:
+#          coordinated_quick_heat: !include packages/coordinated_quick_heat.yaml
+#   3. **IMPORTANT**: Update the climate entity below to match YOUR thermostat
+#   4. Restart Home Assistant
+#   5. Add the Mushroom card to your dashboard (see README)
+#
+# ==============================================================================
+
+# ==============================================================================
+# CONFIGURATION - Update this to match YOUR setup
+# ==============================================================================
+# IMPORTANT: Update these settings to match your thermostat
+#
+# The climate_entity anchor (*climate_entity) is used in most places, but
+# templates in strings (line 106) require manual update to match.
+
+homeassistant:
+  customize:
+    package.node_anchors:
+      # Change this to your physical thermostat entity
+      climate_entity: &climate_entity climate.smart_thermostat
+      # Change this if you want a different heat target temperature
+      # Default is 80°F since physical thermostats often read differently than separate sensors
+      heat_target: &heat_target 80
+
+# ==============================================================================
+# INTERNAL STATE
+# ==============================================================================
+
+input_boolean:
+  coordinated_quick_heat_active:
+    name: "Quick Heat Active"
+    icon: mdi:fire
+    # Internal flag - tracks if Quick Heat mode is currently active
+
+# ==============================================================================
+# SCRIPT
+# ==============================================================================
+
+script:
+  toggle_mts300_to_heat:
+    alias: "Toggle Quick Heat"
+    sequence:
+      - choose:
+          # If currently heating, turn off
+          - conditions:
+              - condition: state
+                entity_id: *climate_entity
+                state: heat
+            sequence:
+              - service: climate.turn_off
+                target:
+                  entity_id: *climate_entity
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.coordinated_quick_heat_active
+              - service: system_log.write
+                data:
+                  message: "Quick Heat: Turned off."
+                  level: warning
+        # Otherwise, turn on heat
+        default:
+          - service: climate.set_temperature
+            data:
+              entity_id: *climate_entity
+              hvac_mode: heat
+              temperature: *heat_target
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_quick_heat_active
+          - service: system_log.write
+            data:
+              message: "Quick Heat: Activated heat @ 80°F. Humidity control will use standalone only."
+              level: warning
+
+# ==============================================================================
+# AUTOMATIONS
+# ==============================================================================
+
+automation:
+  # ============================================================================
+  # Clear Quick Heat Flag When Humidity Normalizes
+  # ============================================================================
+  - id: coordinated_clear_quick_heat_flag
+    alias: "Coordinated: Clear Quick Heat Flag"
+    description: "Clear Quick Heat flag when humidity drops below threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.max_indoor_humidity_sensor
+        below: input_number.coordinated_humidity_off_threshold
+    condition:
+      - condition: state
+        entity_id: input_boolean.coordinated_quick_heat_active
+        state: "on"
+      # Only clear if climate is no longer in heat mode (user already turned it off)
+      # NOTE: Update this entity to match your climate_entity above
+      - condition: template
+        value_template: "{{ not is_state('climate.smart_thermostat', 'heat') }}"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_quick_heat_active
+      - service: system_log.write
+        data:
+          message: "Quick Heat: Flag cleared - humidity normalized and heat is off."
+          level: warning
+    mode: single
+
+# ==============================================================================
+# END OF PACKAGE
+# ==============================================================================

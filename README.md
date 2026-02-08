@@ -20,6 +20,17 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 4. **Humidity priority**: Schedule skips if humidity control is active
 5. **Toggle**: Can be disabled entirely via dashboard
 
+### Quick Heat (Optional)
+**For rare cold weather when you need manual heating:**
+1. **One-button control**: Toggle between heat @ 80°F (configurable) and off
+2. **Smart humidity handling**: When Quick Heat is active and humidity rises:
+   - **Only standalone dehumidifier runs** (AC won't interfere with your heat)
+   - Prevents coordinated from switching your heat to cool mode
+   - Still manages extreme humidity without sacrificing comfort
+3. **Auto-recovery**: When Quick Heat turns off or humidity normalizes, coordinated resumes normal operation
+
+This is ideal for unusual cold weather in warm climates (e.g., Florida freeze) where you need temporary heat but still want humidity protection. Default is 80°F because physical thermostats often read differently than separate temperature sensors.
+
 ## Features
 
 - Automatic coordination between AC and standalone dehumidifier
@@ -30,18 +41,22 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 - Startup sync to handle Home Assistant restarts gracefully
 - All events logged for debugging (filtered by "Coordinated:" prefix)
 - Dashboard cards with expandable settings and real-time status
+- **Optional Quick Heat button** for rare cold weather (uses standalone only for humidity)
 
 ## Files
 
 | File | Description |
 |------|-------------|
 | `coordinated.yaml` | Main package with all automations, entities, and climate config |
+| `coordinated_quick_heat.yaml` | **Optional** Quick Heat package for cold weather manual heating |
 | `coordinated_cards.yaml` | Combined dashboard card with expandable settings |
 | `coordinated_temperature_card.yaml` | Standalone temperature card |
 | `coordinated_humidity_card.yaml` | Standalone humidity card |
 | `coordinated_graph.yaml` | ApexCharts graph showing temperature, humidity, and device states |
 
 ## Installation
+
+### Core Package (Required)
 
 1. Copy `coordinated.yaml` to your Home Assistant packages directory
 2. Add to `configuration.yaml`:
@@ -52,6 +67,30 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
    ```
 3. Restart Home Assistant
 4. Add dashboard cards using the YAML from the card files
+
+### Quick Heat Package (Optional)
+
+**Only install if you want the Quick Heat button for cold weather:**
+
+1. Copy `coordinated_quick_heat.yaml` to your Home Assistant packages directory
+2. **IMPORTANT**: Edit the file and update these configuration lines:
+   - Line 25: Change to your physical thermostat entity:
+     ```yaml
+     climate_entity: &climate_entity climate.YOUR_THERMOSTAT
+     ```
+   - Line 27: Optionally change heat target (default 80°F):
+     ```yaml
+     heat_target: &heat_target 80
+     ```
+   - Line 106: Update template to match your climate entity
+3. Add to `configuration.yaml`:
+   ```yaml
+   homeassistant:
+     packages:
+       coordinated_quick_heat: !include packages/coordinated_quick_heat.yaml
+   ```
+4. Restart Home Assistant
+5. Add the Quick Heat button card to your dashboard (see Quick Heat Button section below)
 
 ## Configuration
 
@@ -118,6 +157,45 @@ Use `coordinated_graph.yaml` for a 24-hour view showing:
 - AC running for temperature (light blue shading)
 - AC running for humidity (light orange shading)
 - Standalone dehumidifier running (light red shading)
+
+### Quick Heat Button (Optional)
+
+**Only if you installed `coordinated_quick_heat.yaml`:**
+
+Add this Mushroom template card to your dashboard:
+
+```yaml
+type: custom:mushroom-template-card
+primary: Quick Heat
+secondary: |-
+  {% if is_state('climate.smart_thermostat', 'heat') %}
+    Heating to {{ state_attr('climate.smart_thermostat', 'temperature') }}°F
+  {% elif is_state('climate.smart_thermostat', 'off') %}
+    Off
+  {% else %}
+    {{ states('climate.smart_thermostat') | title }}
+  {% endif %}
+icon: mdi:fire
+icon_color: |-
+  {% if is_state('climate.smart_thermostat', 'heat') %}
+    deep-orange
+  {% else %}
+    grey
+  {% endif %}
+tap_action:
+  action: call-service
+  service: script.toggle_mts300_to_heat
+hold_action:
+  action: more-info
+```
+
+**Update** `climate.smart_thermostat` to match your physical thermostat entity.
+
+**How it works:**
+- **Tap**: Toggles between heat @ 80°F (or your configured value) and off
+- **Icon**: Fire icon, orange when heating, grey when off
+- **Long press**: Opens climate entity for manual control
+- **When heating + humidity rises**: Only standalone dehumidifier runs (AC won't interfere)
 
 ## Icon Colors
 
