@@ -78,14 +78,49 @@ script:
                   level: warning
         # Otherwise, turn on heat
         default:
+          # If humidity control is active, exit it first to prevent AC/heat conflict
+          - if:
+              - condition: state
+                entity_id: input_boolean.coordinated_humidity_active
+                state: "on"
+            then:
+              # Turn off humidity control
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.coordinated_humidity_active
+              # Restore previous temperature on generic thermostat
+              - service: climate.set_temperature
+                target:
+                  entity_id: climate.coordinated_thermostat
+                data:
+                  temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
+              # Turn off standalone if it was running
+              - if:
+                  - condition: state
+                    entity_id: humidifier.151732605035846_humidifier
+                    state: "on"
+                then:
+                  - service: humidifier.turn_off
+                    target:
+                      entity_id: humidifier.151732605035846_humidifier
+              - service: system_log.write
+                data:
+                  message: "Quick Heat: Exited humidity control to prevent AC/heat conflict."
+                  level: warning
+
+          # Set physical thermostat to heat mode
           - service: climate.set_temperature
             data:
               entity_id: *climate_entity
               hvac_mode: heat
               temperature: *heat_target
+
+          # Set Quick Heat flag
           - service: input_boolean.turn_on
             target:
               entity_id: input_boolean.coordinated_quick_heat_active
+
+          # Log activation
           - service: system_log.write
             data:
               message: "Quick Heat: Activated heat @ 80°F. Humidity control will use standalone only."
@@ -99,8 +134,8 @@ automation:
   # ============================================================================
   # Clear Quick Heat Flag When Humidity Normalizes
   # ============================================================================
-  - id: coordinated_clear_quick_heat_flag
-    alias: "Coordinated: Clear Quick Heat Flag"
+  - id: coordinated_clear_quick_heat_flag_humidity
+    alias: "Coordinated: Clear Quick Heat Flag (Humidity)"
     description: "Clear Quick Heat flag when humidity drops below threshold"
     trigger:
       - platform: numeric_state
@@ -121,6 +156,34 @@ automation:
       - service: system_log.write
         data:
           message: "Quick Heat: Flag cleared - humidity normalized and heat is off."
+          level: warning
+    mode: single
+
+  # ============================================================================
+  # Clear Quick Heat Flag When Climate Manually Changed
+  # ============================================================================
+  - id: coordinated_clear_quick_heat_flag_manual
+    alias: "Coordinated: Clear Quick Heat Flag (Manual Change)"
+    description: "Clear Quick Heat flag if user manually changes climate mode"
+    trigger:
+      - platform: state
+        entity_id: climate.smart_thermostat
+        attribute: hvac_mode
+    condition:
+      - condition: state
+        entity_id: input_boolean.coordinated_quick_heat_active
+        state: "on"
+      # Clear flag if climate is no longer in heat mode
+      # NOTE: Update this entity to match your climate_entity above
+      - condition: template
+        value_template: "{{ not is_state('climate.smart_thermostat', 'heat') }}"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_quick_heat_active
+      - service: system_log.write
+        data:
+          message: "Quick Heat: Flag cleared - climate manually changed to {{ states('climate.smart_thermostat') }}."
           level: warning
     mode: single
 
