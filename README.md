@@ -74,15 +74,20 @@ This is ideal for unusual cold weather in warm climates (e.g., Florida freeze) w
 
 1. Copy `coordinated_quick_heat.yaml` to your Home Assistant packages directory
 2. **IMPORTANT**: Edit the file and update these configuration lines:
-   - Line 25: Change to your physical thermostat entity:
+   - **Line 39**: Change to your physical thermostat entity:
      ```yaml
      climate_entity: &climate_entity climate.YOUR_THERMOSTAT
      ```
-   - Line 27: Optionally change heat target (default 80°F):
+     Also update line 127 (template condition)
+
+   - **Line 42**: Optionally change heat target (default 80°F):
      ```yaml
      heat_target: &heat_target 80
      ```
-   - Line 106: Update template to match your climate entity
+     **If you change this from 80**, also update:
+     - Line 107 (generic thermostat calculation)
+     - Line 118 (log message calculation)
+     - See comments at top of file for details
 3. Add to `configuration.yaml`:
    ```yaml
    homeassistant:
