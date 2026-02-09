@@ -189,6 +189,20 @@ script:
                     data:
                       message: "Quick Heat: Turned off. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
                       level: warning
+                else:
+                  # Humidity is normal - turn off standalone if it's running
+                  - if:
+                      - condition: state
+                        entity_id: humidifier.151732605035846_humidifier
+                        state: "on"
+                    then:
+                      - service: humidifier.turn_off
+                        target:
+                          entity_id: humidifier.151732605035846_humidifier
+                      - service: system_log.write
+                        data:
+                          message: "Quick Heat: Turned off. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                          level: warning
         # Otherwise, turn on heat
         default:
           # If humidity control is active, exit it first to prevent AC/heat conflict
@@ -197,7 +211,7 @@ script:
                 entity_id: input_boolean.coordinated_humidity_active
                 state: "on"
             then:
-              # Turn off humidity control
+              # Turn off humidity control flag (but leave standalone running for now)
               - service: input_boolean.turn_off
                 target:
                   entity_id: input_boolean.coordinated_humidity_active
@@ -207,18 +221,9 @@ script:
                   entity_id: climate.coordinated_thermostat
                 data:
                   temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
-              # Turn off standalone if it was running
-              - if:
-                  - condition: state
-                    entity_id: humidifier.151732605035846_humidifier
-                    state: "on"
-                then:
-                  - service: humidifier.turn_off
-                    target:
-                      entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: "Quick Heat: Exited humidity control to prevent AC/heat conflict."
+                  message: "Quick Heat: Exited humidity control. Standalone will stay on if humidity still high."
                   level: warning
 
           # Clear any suppression from previous manual overrides
@@ -263,6 +268,63 @@ script:
             data:
               message: "Quick Heat: Activated heat @ 80°F. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict. Humidity control will use standalone only."
               level: warning
+
+          # Check if humidity is high and needs control while Quick Heat is active
+          - if:
+              - condition: state
+                entity_id: input_boolean.coordinated_humidity_enabled
+                state: "on"
+              - condition: state
+                entity_id: input_boolean.coordinated_humidity_suppressed
+                state: "off"
+              - condition: numeric_state
+                entity_id: sensor.max_indoor_humidity_sensor
+                above: input_number.coordinated_humidity_on_threshold
+            then:
+              # Activate humidity control
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.coordinated_humidity_active
+              # Save timestamp for absolute alert timing
+              - service: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.coordinated_humidity_start_time
+                data:
+                  datetime: "{{ now() }}"
+              # Save current temperature (83°F generic target)
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.coordinated_previous_temp
+                data:
+                  value: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(76) | round(0) }}"
+              # Save triggering humidity value
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.coordinated_trigger_humidity
+                data:
+                  value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
+              # Activate standalone only (Quick Heat is on, don't use AC)
+              - service: humidifier.turn_on
+                target:
+                  entity_id: humidifier.151732605035846_humidifier
+              - service: system_log.write
+                data:
+                  message: "Quick Heat: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only."
+                  level: warning
+            else:
+              # Humidity is normal - turn off standalone if it's running
+              - if:
+                  - condition: state
+                    entity_id: humidifier.151732605035846_humidifier
+                    state: "on"
+                then:
+                  - service: humidifier.turn_off
+                    target:
+                      entity_id: humidifier.151732605035846_humidifier
+                  - service: system_log.write
+                    data:
+                      message: "Quick Heat: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                      level: warning
 
 # ==============================================================================
 # AUTOMATIONS
@@ -472,6 +534,20 @@ automation:
             data:
               message: "Quick Heat: Auto-disabled - target reached. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
               level: warning
+        else:
+          # Humidity is normal - turn off standalone if it's running
+          - if:
+              - condition: state
+                entity_id: humidifier.151732605035846_humidifier
+                state: "on"
+            then:
+              - service: humidifier.turn_off
+                target:
+                  entity_id: humidifier.151732605035846_humidifier
+              - service: system_log.write
+                data:
+                  message: "Quick Heat: Auto-disabled - target reached. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                  level: warning
     mode: single
 
 # ==============================================================================
