@@ -131,7 +131,7 @@ script:
                           {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
                         {% endif %}
                         {% set is_day = day_start <= now_time < night_start %}
-                        Quick Heat: Turned off. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
+                        {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
                       level: warning
                 else:
                   # No schedule, restore to previous temp
@@ -142,7 +142,7 @@ script:
                       temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
                   - service: system_log.write
                     data:
-                      message: "Quick Heat: Turned off. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
+                      message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
                       level: warning
 
               # Clear Quick Heat flag
@@ -187,7 +187,7 @@ script:
                       temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
                   - service: system_log.write
                     data:
-                      message: "Quick Heat: Turned off. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
+                      message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
                       level: warning
                 else:
                   # Humidity is normal - turn off standalone if it's running
@@ -201,7 +201,7 @@ script:
                           entity_id: humidifier.151732605035846_humidifier
                       - service: system_log.write
                         data:
-                          message: "Quick Heat: Turned off. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
                           level: warning
         # Otherwise, turn on heat
         default:
@@ -223,7 +223,7 @@ script:
                   temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
               - service: system_log.write
                 data:
-                  message: "Quick Heat: Exited humidity control. Standalone will stay on if humidity still high."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Exited humidity control. Standalone will stay on if humidity still high."
                   level: warning
 
           # Clear any suppression from previous manual overrides
@@ -238,7 +238,7 @@ script:
                   entity_id: input_boolean.coordinated_humidity_suppressed
               - service: system_log.write
                 data:
-                  message: "Quick Heat: Cleared suppression flag to allow humidity control when Quick Heat deactivates."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Cleared suppression flag to allow humidity control when Quick Heat deactivates."
                   level: warning
 
           # Set generic thermostat to high target to prevent AC/heat conflict
@@ -266,7 +266,7 @@ script:
           # Log activation
           - service: system_log.write
             data:
-              message: "Quick Heat: Activated heat @ 80°F. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict. Humidity control will use standalone only."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Activated heat @ 80°F. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict. Humidity control will use standalone only."
               level: warning
 
           # Check if humidity is high and needs control while Quick Heat is active
@@ -309,7 +309,7 @@ script:
                   entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: "Quick Heat: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only."
                   level: warning
             else:
               # Humidity is normal - turn off standalone if it's running
@@ -323,7 +323,7 @@ script:
                       entity_id: humidifier.151732605035846_humidifier
                   - service: system_log.write
                     data:
-                      message: "Quick Heat: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                      message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
                       level: warning
 
 # ==============================================================================
@@ -355,7 +355,7 @@ automation:
           entity_id: input_boolean.coordinated_quick_heat_active
       - service: system_log.write
         data:
-          message: "Quick Heat: Flag cleared - humidity normalized and heat is off."
+          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Flag cleared - humidity normalized and heat is off."
           level: warning
     mode: single
 
@@ -383,7 +383,7 @@ automation:
           entity_id: input_boolean.coordinated_quick_heat_active
       - service: system_log.write
         data:
-          message: "Quick Heat: Flag cleared - climate manually changed to {{ states('climate.smart_thermostat') }}."
+          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Flag cleared - climate manually changed to {{ states('climate.smart_thermostat') }}."
           level: warning
     mode: single
 
@@ -476,7 +476,7 @@ automation:
                   {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
                 {% endif %}
                 {% set is_day = day_start <= now_time < night_start %}
-                Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
+                {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
               level: warning
         else:
           # No schedule, restore to previous temp
@@ -487,7 +487,7 @@ automation:
               temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
           - service: system_log.write
             data:
-              message: "Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
               level: warning
 
       # Clear Quick Heat flag
@@ -532,7 +532,7 @@ automation:
               temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
           - service: system_log.write
             data:
-              message: "Quick Heat: Auto-disabled - target reached. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
               level: warning
         else:
           # Humidity is normal - turn off standalone if it's running
@@ -546,7 +546,7 @@ automation:
                   entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: "Quick Heat: Auto-disabled - target reached. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
                   level: warning
     mode: single
 

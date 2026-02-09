@@ -379,7 +379,7 @@ automation:
               entity_id: humidifier.151732605035846_humidifier
           - service: system_log.write
             data:
-              message: "Coordinated: Quick Heat active. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Using standalone only (AC will not interfere with heat)."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Quick Heat active. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Using standalone only (AC will not interfere with heat)."
               level: warning
         else:
           # NORMAL MODE: Use AC to cool to floor temp + standalone as needed
@@ -393,7 +393,7 @@ automation:
           # Log the event
           - service: system_log.write
             data:
-              message: "Coordinated: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Lowering to {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F to dehumidify."
               level: warning
 
           # Check if AC can actually run given current temperature and generic_thermostat tolerances
@@ -411,7 +411,7 @@ automation:
               - service: system_log.write
                 data:
                   message: >
-                    Coordinated: Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
+                    {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
                     is within hot_tolerance ({{ states('input_number.coordinated_hot_tolerance') | float(1.5) }}°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
                     AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F.
                     Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
@@ -449,7 +449,7 @@ automation:
                   - service: system_log.write
                     data:
                       message: >
-                        Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min failsafe activated standalone. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}%
+                        {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min failsafe activated standalone. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}%
                         (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%) has not cleared after {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }} minutes.
                         Standalone was not already running - activating now.
                       level: warning
@@ -466,7 +466,7 @@ automation:
                       interruption-level: critical
               - service: system_log.write
                 data:
-                  message: "Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min alert. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min alert. Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
                   level: warning
 
     mode: single
@@ -572,7 +572,7 @@ automation:
                       {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
                     {% endif %}
                     {% set is_day = day_start <= now_time < night_start %}
-                    Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%). Schedule enabled, applied {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
+                    {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%). Schedule enabled, applied {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
                   level: warning
             else:
               # No schedule, restore previous temp
@@ -583,12 +583,12 @@ automation:
                   temperature: "{{ states('input_number.coordinated_previous_temp') | float(76) }}"
               - service: system_log.write
                 data:
-                  message: "Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%). Restored to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') | round(0) }}%). Restored to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
                   level: warning
         else:
           - service: system_log.write
             data:
-              message: "Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Keeping manual settings."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Keeping manual settings."
               level: warning
 
     mode: single
@@ -641,7 +641,7 @@ automation:
                   entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: "Coordinated: Standalone on. AC cooled to {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Standalone on. AC cooled to {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) but humidity still {{ states('sensor.max_indoor_humidity_sensor') }}%."
                   level: warning
 
           # Path 2: Humidity mode just activated (edge case - room already at/below floor)
@@ -676,7 +676,7 @@ automation:
                   entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: "Coordinated: Standalone on. Room already at {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) - AC can't help. Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Standalone on. Room already at {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F (floor {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F) - AC can't help. Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%."
                   level: warning
 
     mode: single
@@ -721,7 +721,7 @@ automation:
       # Log the event
       - service: system_log.write
         data:
-          message: "Coordinated: Manual override detected. Humidity control paused until humidity drops below {{ states('input_number.coordinated_humidity_off_threshold') | int }}%."
+          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Manual override detected. Humidity control paused until humidity drops below {{ states('input_number.coordinated_humidity_off_threshold') | int }}%."
           level: warning
 
     mode: single
@@ -758,7 +758,7 @@ automation:
       # Log the event
       - service: system_log.write
         data:
-          message: "Coordinated: Suppression cleared. Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Humidity control re-enabled."
+          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Suppression cleared. Humidity dropped to {{ states('sensor.max_indoor_humidity_sensor') }}%. Humidity control re-enabled."
           level: warning
 
     mode: single
@@ -868,7 +868,7 @@ automation:
               entity_id: input_boolean.coordinated_initialized
           - service: system_log.write
             data:
-              message: "Coordinated Startup: First run - applied default settings (sun-based scheduling enabled, -30min sunset offset)"
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: First run - applied default settings (sun-based scheduling enabled, -30min sunset offset)"
               level: warning
 
       # If humidity_active is on but humidity is below threshold, exit humidity mode
@@ -893,7 +893,7 @@ automation:
                   entity_id: humidifier.151732605035846_humidifier
           - service: system_log.write
             data:
-              message: "Coordinated Startup: humidity_active was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Turned OFF humidity_active and standalone."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: humidity_active was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Turned OFF humidity_active and standalone."
               level: warning
 
       # If suppressed but humidity is below threshold, clear suppression
@@ -910,7 +910,7 @@ automation:
               entity_id: input_boolean.coordinated_humidity_suppressed
           - service: system_log.write
             data:
-              message: "Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Cleared suppression."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: humidity_suppressed was ON but humidity ({{ states('sensor.max_indoor_humidity_sensor') }}%) is below threshold. Cleared suppression."
               level: warning
 
       # Handle Quick Heat + humidity control state inconsistencies
@@ -935,7 +935,7 @@ automation:
                   entity_id: humidifier.151732605035846_humidifier
           - service: system_log.write
             data:
-              message: "Coordinated Startup: Inconsistent state detected - Quick Heat ON but humidity_active also ON. Turned OFF humidity_active (Quick Heat takes precedence)."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Inconsistent state detected - Quick Heat ON but humidity_active also ON. Turned OFF humidity_active (Quick Heat takes precedence)."
               level: warning
 
       # Case 2: Quick Heat ON + humidity HIGH + humidity_active OFF = need to activate standalone
@@ -983,7 +983,7 @@ automation:
               entity_id: humidifier.151732605035846_humidifier
           - service: system_log.write
             data:
-              message: "Coordinated Startup: Quick Heat active and humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only (AC won't interfere)."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Quick Heat active and humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated humidity control with standalone only (AC won't interfere)."
               level: warning
 
       # Restore generic thermostat target if Quick Heat is active
@@ -998,7 +998,7 @@ automation:
               temperature: "{{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) }}"
           - service: system_log.write
             data:
-              message: "Coordinated Startup: Quick Heat active. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Quick Heat active. Set generic thermostat to {{ 80 + (2 * states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F to prevent AC conflict."
               level: warning
 
       # Case 3: Quick Heat OFF + humidity HIGH + humidity_active OFF = activate normal humidity control
@@ -1048,7 +1048,7 @@ automation:
               temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
           - service: system_log.write
             data:
-              message: "Coordinated Startup: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated normal humidity control (AC to floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F)."
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%). Activated normal humidity control (AC to floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F)."
               level: warning
 
       # Sync temperature based on schedule (if enabled and humidity control not active and Quick Heat not active)
@@ -1106,13 +1106,13 @@ automation:
                   {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
                 {% endif %}
                 {% set is_day = day_start <= now_time < night_start %}
-                Coordinated Startup: Set temperature to {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F ({{ 'day' if is_day else 'night' }} mode).
+                {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Set temperature to {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F ({{ 'day' if is_day else 'night' }} mode).
               level: warning
 
       # Log startup complete with current state
       - service: system_log.write
         data:
-          message: "Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}, Quick Heat: {{ states('input_boolean.coordinated_quick_heat_active') }}"
+          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Sync complete. Humidity: {{ states('sensor.max_indoor_humidity_sensor') }}%, Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}, Active: {{ states('input_boolean.coordinated_humidity_active') }}, Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}, Schedule: {{ states('input_boolean.coordinated_schedule_enabled') }}, Quick Heat: {{ states('input_boolean.coordinated_quick_heat_active') }}"
           level: warning
 
       # If humidity control is active but standalone hasn't been activated yet,
@@ -1139,7 +1139,7 @@ automation:
               - service: system_log.write
                 data:
                   message: >
-                    Coordinated Startup: Humidity control was active after restart. Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
+                    {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Humidity control was active after restart. Standalone activated immediately. Current temp {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | round(1) }}°F
                     is within hot_tolerance ({{ states('input_number.coordinated_hot_tolerance') | float(1.5) }}°F) of floor temp {{ states('input_number.coordinated_humidity_floor_temp') | int }}°F.
                     AC won't run until temp exceeds {{ (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_hot_tolerance') | float(1.5)) | round(1) }}°F.
                     Humidity at {{ states('sensor.max_indoor_humidity_sensor') }}%.
@@ -1149,7 +1149,7 @@ automation:
               - service: system_log.write
                 data:
                   message: >
-                    Coordinated Startup: Humidity control active, continuing alert timer.
+                    {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: Humidity control active, continuing alert timer.
                     Started at {{ states('input_datetime.coordinated_humidity_start_time') }},
                     will alert at {{ (states('input_datetime.coordinated_humidity_start_time') | as_datetime | as_local + timedelta(minutes=states('input_number.coordinated_alert_delay_minutes') | int(45))).strftime('%Y-%m-%d %H:%M:%S') }}.
                   level: warning
@@ -1185,7 +1185,7 @@ automation:
                       - service: system_log.write
                         data:
                           message: >
-                            Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min failsafe activated standalone (post-restart). Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}%
+                            {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min failsafe activated standalone (post-restart). Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}%
                             (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%) has not cleared after {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }} minutes.
                             Standalone was not already running - activating now.
                           level: warning
@@ -1202,7 +1202,7 @@ automation:
                           interruption-level: critical
                   - service: system_log.write
                     data:
-                      message: "Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min alert (post-restart). Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
+                      message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: {{ states('input_number.coordinated_alert_delay_minutes') | int(45) }}-min alert (post-restart). Humidity at {{ states('sensor.max_indoor_humidity_sensor') | round(1) }}% (started at {{ states('input_number.coordinated_trigger_humidity') | round(1) }}%). Not clearing effectively despite active dehumidification."
                       level: warning
     mode: single
 
@@ -1238,9 +1238,9 @@ automation:
         data:
           message: >
             {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
-              Coordinated: Day mode. Sunrise{% if states('input_number.coordinated_day_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_day_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
+              {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Day mode. Sunrise{% if states('input_number.coordinated_day_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_day_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
             {% else %}
-              Coordinated: Day mode. Switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
+              {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Day mode. Switched to {{ states('input_number.coordinated_day_temp') | int(76) }}°F.
             {% endif %}
           level: warning
     mode: single
@@ -1277,9 +1277,9 @@ automation:
         data:
           message: >
             {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
-              Coordinated: Night mode. Sunset{% if states('input_number.coordinated_night_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_night_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
+              {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Night mode. Sunset{% if states('input_number.coordinated_night_sun_offset') | int(0) != 0 %} {{ states('input_number.coordinated_night_sun_offset') | int(0) }} min{% endif %}: switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
             {% else %}
-              Coordinated: Night mode. Switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
+              {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Night mode. Switched to {{ states('input_number.coordinated_night_temp') | int(73) }}°F.
             {% endif %}
           level: warning
     mode: single
