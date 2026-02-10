@@ -126,12 +126,12 @@ script:
                         entity_id: input_boolean.coordinated_schedule_enabled
                         state: "on"
                     then:
-                  # Apply day or night temp based on current time
-                  - service: climate.set_temperature
-                    target:
-                      entity_id: climate.coordinated_thermostat
-                    data:
-                      temperature: >
+                      # Apply day or night temp based on current time
+                      - service: climate.set_temperature
+                        target:
+                          entity_id: climate.coordinated_thermostat
+                        data:
+                          temperature: >
                         {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
                         {% set now_time = now() %}
                         {% if use_sun %}
@@ -152,9 +152,9 @@ script:
                         {% else %}
                           {{ states('input_number.coordinated_night_temp') | float(73) }}
                         {% endif %}
-                  - service: system_log.write
-                    data:
-                      message: >
+                      - service: system_log.write
+                        data:
+                          message: >
                         {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
                         {% set now_time = now() %}
                         {% if use_sun %}
@@ -172,8 +172,8 @@ script:
                         {% endif %}
                         {% set is_day = day_start <= now_time < night_start %}
                         {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
-                      level: warning
-                else:
+                          level: warning
+                    else:
                   # No schedule, restore to previous temp
                   - service: climate.set_temperature
                     target:
@@ -465,12 +465,12 @@ automation:
                 entity_id: input_boolean.coordinated_schedule_enabled
                 state: "on"
             then:
-          # Apply day or night temp based on current time
-          - service: climate.set_temperature
-            target:
-              entity_id: climate.coordinated_thermostat
-            data:
-              temperature: >
+              # Apply day or night temp based on current time
+              - service: climate.set_temperature
+                target:
+                  entity_id: climate.coordinated_thermostat
+                data:
+                  temperature: >
                 {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
                 {% set now_time = now() %}
                 {% if use_sun %}
@@ -491,9 +491,9 @@ automation:
                 {% else %}
                   {{ states('input_number.coordinated_night_temp') | float(73) }}
                 {% endif %}
-          - service: system_log.write
-            data:
-              message: >
+              - service: system_log.write
+                data:
+                  message: >
                 {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
                 {% set now_time = now() %}
                 {% if use_sun %}
@@ -511,8 +511,8 @@ automation:
                 {% endif %}
                 {% set is_day = day_start <= now_time < night_start %}
                 {{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ 'day' if is_day else 'night' }} temp {{ states('input_number.coordinated_day_temp') | int if is_day else states('input_number.coordinated_night_temp') | int }}°F.
-              level: warning
-        else:
+                  level: warning
+            else:
           # No schedule, restore to previous temp
           - service: climate.set_temperature
             target:
