@@ -132,26 +132,26 @@ script:
                           entity_id: climate.coordinated_thermostat
                         data:
                           temperature: >
-                        {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
-                        {% set now_time = now() %}
-                        {% if use_sun %}
-                          {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
-                          {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
-                          {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
-                          {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
-                          {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
-                          {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
-                          {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
-                          {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
-                        {% else %}
-                          {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
-                          {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
-                        {% endif %}
-                        {% if day_start <= now_time < night_start %}
-                          {{ states('input_number.coordinated_day_temp') | float(76) }}
-                        {% else %}
-                          {{ states('input_number.coordinated_night_temp') | float(73) }}
-                        {% endif %}
+                            {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
+                            {% set now_time = now() %}
+                            {% if use_sun %}
+                              {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+                              {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+                              {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
+                              {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
+                              {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+                              {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+                              {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
+                              {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
+                            {% else %}
+                              {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
+                              {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
+                            {% endif %}
+                            {% if day_start <= now_time < night_start %}
+                              {{ states('input_number.coordinated_day_temp') | float(76) }}
+                            {% else %}
+                              {{ states('input_number.coordinated_night_temp') | float(73) }}
+                            {% endif %}
                       - service: system_log.write
                         data:
                           message: >
@@ -471,26 +471,26 @@ automation:
                   entity_id: climate.coordinated_thermostat
                 data:
                   temperature: >
-                {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
-                {% set now_time = now() %}
-                {% if use_sun %}
-                  {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
-                  {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
-                  {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
-                  {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
-                  {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
-                  {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
-                  {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
-                  {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
-                {% else %}
-                  {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
-                  {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
-                {% endif %}
-                {% if day_start <= now_time < night_start %}
-                  {{ states('input_number.coordinated_day_temp') | float(76) }}
-                {% else %}
-                  {{ states('input_number.coordinated_night_temp') | float(73) }}
-                {% endif %}
+                    {% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}
+                    {% set now_time = now() %}
+                    {% if use_sun %}
+                      {% set next_rising = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+                      {% set next_setting = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
+                      {% set today_sunrise = next_rising if next_rising.date() == now_time.date() else next_rising - timedelta(days=1) %}
+                      {% set today_sunset = next_setting if next_setting.date() == now_time.date() else next_setting - timedelta(days=1) %}
+                      {% set day_offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
+                      {% set night_offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
+                      {% set day_start = today_sunrise + timedelta(minutes=day_offset) %}
+                      {% set night_start = today_sunset + timedelta(minutes=night_offset) %}
+                    {% else %}
+                      {% set day_start = today_at(states('input_datetime.coordinated_day_start')) %}
+                      {% set night_start = today_at(states('input_datetime.coordinated_night_start')) %}
+                    {% endif %}
+                    {% if day_start <= now_time < night_start %}
+                      {{ states('input_number.coordinated_day_temp') | float(76) }}
+                    {% else %}
+                      {{ states('input_number.coordinated_night_temp') | float(73) }}
+                    {% endif %}
               - service: system_log.write
                 data:
                   message: >
