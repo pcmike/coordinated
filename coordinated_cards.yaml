@@ -173,3 +173,53 @@ cards:
               icon_color: indigo
               tap_action:
                 action: more-info
+  - type: custom:expander-card
+    expanded: false
+    padding: 0
+    title-card:
+      type: markdown
+      content: |
+        🔍 **Debug Values** — Tap to expand troubleshooting info
+    title-card-button-overlay: true
+    cards:
+      - type: markdown
+        content: |
+          ## Time & Sun
+          - Current: {{ now().strftime('%H:%M:%S') }}
+          - Sunrise: {{ (state_attr('sun.sun', 'next_rising') | as_datetime | as_local).strftime('%H:%M') }}
+          - Sunset: {{ (state_attr('sun.sun', 'next_setting') | as_datetime | as_local).strftime('%H:%M') }}
+
+          ## Temperature
+          - Current: {{ state_attr('climate.coordinated_thermostat', 'current_temperature') }}°F
+          - Generic Target: {{ state_attr('climate.coordinated_thermostat', 'temperature') }}°F
+          - Day Temp: {{ states('input_number.coordinated_day_temp') }}°F
+          - Night Temp: {{ states('input_number.coordinated_night_temp') }}°F
+          - Floor Temp: {{ states('input_number.coordinated_humidity_floor_temp') }}°F
+          - Previous Temp: {{ states('input_number.coordinated_previous_temp') }}°F
+
+          ## Humidity
+          - Current: {{ states('sensor.max_indoor_humidity_sensor') }}%
+          - ON Threshold: {{ states('input_number.coordinated_humidity_on_threshold') }}%
+          - OFF Threshold: {{ states('input_number.coordinated_humidity_off_threshold') }}%
+          - Trigger Value: {{ states('input_number.coordinated_trigger_humidity') }}%
+
+          ## Control Flags
+          - Humidity Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}
+          - Humidity Active: {{ states('input_boolean.coordinated_humidity_active') }}
+          - Humidity Suppressed: {{ states('input_boolean.coordinated_humidity_suppressed') }}
+          - Quick Heat Active: {{ states('input_boolean.coordinated_quick_heat_active') }}
+          - Schedule Enabled: {{ states('input_boolean.coordinated_schedule_enabled') }}
+          - Use Sun: {{ states('input_boolean.coordinated_use_sun') }}
+
+          ## Offsets & Tolerances
+          - Day Offset: {{ states('input_number.coordinated_day_sun_offset') | int }} min
+          - Night Offset: {{ states('input_number.coordinated_night_sun_offset') | int }} min
+          - Hot Tolerance: {{ states('input_number.coordinated_hot_tolerance') }}°F
+          - Cold Tolerance: {{ states('input_number.coordinated_cold_tolerance') }}°F
+          - Floor Tolerance: {{ states('input_number.coordinated_floor_temp_tolerance') }}°F
+
+          ## Devices
+          - AC: {{ states('switch.meross_cool_switch') }}
+          - Standalone: {{ states('humidifier.151732605035846_humidifier') }}
+          - Generic: {{ states('climate.coordinated_thermostat') }}
+          - Physical: {{ states('climate.smart_thermostat') }}

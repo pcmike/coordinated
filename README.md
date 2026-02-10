@@ -151,6 +151,15 @@ Use `coordinated_cards.yaml` for a compact view with:
 - Humidity and temperature display side by side
 - Tap to expand settings sliders
 - Color-coded icons indicating current state
+- **Debug section** with all system values for troubleshooting (collapsed by default)
+
+The debug section shows real-time values for:
+- Current time, sunrise, and sunset times
+- All temperature settings and current values
+- All humidity values and thresholds
+- All control flags (humidity active, suppressed, quick heat, schedule, etc.)
+- Tolerance values (hot, cold, floor)
+- Device states (AC, standalone, generic thermostat, physical thermostat)
 
 ### Separate Cards
 Use `coordinated_temperature_card.yaml` and `coordinated_humidity_card.yaml` if you prefer individual cards.
