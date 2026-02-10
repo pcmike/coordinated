@@ -79,13 +79,53 @@ script:
                 target:
                   entity_id: *climate_entity
 
-              # Restore generic thermostat target
-              # Check if day/night schedule should be used
+              # Clear Quick Heat flag first (before temperature changes that might trigger Manual Override)
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.coordinated_quick_heat_active
+
+              # Check humidity FIRST before restoring temperature (prevents Manual Override race condition)
               - if:
                   - condition: state
-                    entity_id: input_boolean.coordinated_schedule_enabled
+                    entity_id: input_boolean.coordinated_humidity_enabled
                     state: "on"
+                  - condition: state
+                    entity_id: input_boolean.coordinated_humidity_suppressed
+                    state: "off"
+                  - condition: numeric_state
+                    entity_id: sensor.max_indoor_humidity_sensor
+                    above: input_number.coordinated_humidity_on_threshold
                 then:
+                  # HUMIDITY HIGH: Activate humidity control and set to floor temp
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: input_boolean.coordinated_humidity_active
+                  - service: input_datetime.set_datetime
+                    target:
+                      entity_id: input_datetime.coordinated_humidity_start_time
+                    data:
+                      datetime: "{{ now() }}"
+                  - service: input_number.set_value
+                    target:
+                      entity_id: input_number.coordinated_trigger_humidity
+                    data:
+                      value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
+                  - service: climate.set_temperature
+                    target:
+                      entity_id: climate.coordinated_thermostat
+                    data:
+                      temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
+                  - service: system_log.write
+                    data:
+                      message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
+                      level: warning
+                else:
+                  # HUMIDITY NORMAL: Restore to schedule/previous temp
+                  - if:
+                      - condition: state
+                        entity_id: input_boolean.coordinated_schedule_enabled
+                        state: "on"
+                    then:
                   # Apply day or night temp based on current time
                   - service: climate.set_temperature
                     target:
@@ -144,53 +184,7 @@ script:
                     data:
                       message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
                       level: warning
-
-              # Clear Quick Heat flag
-              - service: input_boolean.turn_off
-                target:
-                  entity_id: input_boolean.coordinated_quick_heat_active
-
-              # Check if humidity is high and needs control after Quick Heat turns off
-              - if:
-                  - condition: state
-                    entity_id: input_boolean.coordinated_humidity_enabled
-                    state: "on"
-                  - condition: state
-                    entity_id: input_boolean.coordinated_humidity_suppressed
-                    state: "off"
-                  - condition: numeric_state
-                    entity_id: sensor.max_indoor_humidity_sensor
-                    above: input_number.coordinated_humidity_on_threshold
-                then:
-                  # Activate humidity control
-                  - service: input_boolean.turn_on
-                    target:
-                      entity_id: input_boolean.coordinated_humidity_active
-                  # Save timestamp for absolute alert timing
-                  - service: input_datetime.set_datetime
-                    target:
-                      entity_id: input_datetime.coordinated_humidity_start_time
-                    data:
-                      datetime: "{{ now() }}"
-                  # Previous temp already saved by schedule restoration above
-                  # Save triggering humidity value
-                  - service: input_number.set_value
-                    target:
-                      entity_id: input_number.coordinated_trigger_humidity
-                    data:
-                      value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
-                  # Cool to floor temp (normal humidity control resumes)
-                  - service: climate.set_temperature
-                    target:
-                      entity_id: climate.coordinated_thermostat
-                    data:
-                      temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
-                  - service: system_log.write
-                    data:
-                      message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
-                      level: warning
-                else:
-                  # Humidity is normal - turn off standalone if it's running
+                  # Turn off standalone if humidity is normal and it's running
                   - if:
                       - condition: state
                         entity_id: humidifier.151732605035846_humidifier
@@ -201,7 +195,7 @@ script:
                           entity_id: humidifier.151732605035846_humidifier
                       - service: system_log.write
                         data:
-                          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Turned off. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                          message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
                           level: warning
         # Otherwise, turn on heat
         default:
@@ -424,13 +418,53 @@ automation:
         target:
           entity_id: climate.smart_thermostat
 
-      # Restore generic thermostat target
-      # Check if day/night schedule should be used
+      # Clear Quick Heat flag first (before temperature changes that might trigger Manual Override)
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.coordinated_quick_heat_active
+
+      # Check humidity FIRST before restoring temperature (prevents Manual Override race condition)
       - if:
           - condition: state
-            entity_id: input_boolean.coordinated_schedule_enabled
+            entity_id: input_boolean.coordinated_humidity_enabled
             state: "on"
+          - condition: state
+            entity_id: input_boolean.coordinated_humidity_suppressed
+            state: "off"
+          - condition: numeric_state
+            entity_id: sensor.max_indoor_humidity_sensor
+            above: input_number.coordinated_humidity_on_threshold
         then:
+          # HUMIDITY HIGH: Activate humidity control and set to floor temp
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.coordinated_humidity_active
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.coordinated_humidity_start_time
+            data:
+              datetime: "{{ now() }}"
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_trigger_humidity
+            data:
+              value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
+          - service: climate.set_temperature
+            target:
+              entity_id: climate.coordinated_thermostat
+            data:
+              temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
+          - service: system_log.write
+            data:
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
+              level: warning
+        else:
+          # HUMIDITY NORMAL: Restore to schedule/previous temp
+          - if:
+              - condition: state
+                entity_id: input_boolean.coordinated_schedule_enabled
+                state: "on"
+            then:
           # Apply day or night temp based on current time
           - service: climate.set_temperature
             target:
@@ -489,53 +523,7 @@ automation:
             data:
               message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Restored generic thermostat to {{ states('input_number.coordinated_previous_temp') | round(0) | int }}°F."
               level: warning
-
-      # Clear Quick Heat flag
-      - service: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.coordinated_quick_heat_active
-
-      # Check if humidity is high and needs control after Quick Heat turns off
-      - if:
-          - condition: state
-            entity_id: input_boolean.coordinated_humidity_enabled
-            state: "on"
-          - condition: state
-            entity_id: input_boolean.coordinated_humidity_suppressed
-            state: "off"
-          - condition: numeric_state
-            entity_id: sensor.max_indoor_humidity_sensor
-            above: input_number.coordinated_humidity_on_threshold
-        then:
-          # Activate humidity control
-          - service: input_boolean.turn_on
-            target:
-              entity_id: input_boolean.coordinated_humidity_active
-          # Save timestamp for absolute alert timing
-          - service: input_datetime.set_datetime
-            target:
-              entity_id: input_datetime.coordinated_humidity_start_time
-            data:
-              datetime: "{{ now() }}"
-          # Previous temp already saved by schedule restoration above
-          # Save triggering humidity value
-          - service: input_number.set_value
-            target:
-              entity_id: input_number.coordinated_trigger_humidity
-            data:
-              value: "{{ states('sensor.max_indoor_humidity_sensor') | float(50) }}"
-          # Cool to floor temp (normal humidity control resumes)
-          - service: climate.set_temperature
-            target:
-              entity_id: climate.coordinated_thermostat
-            data:
-              temperature: "{{ states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
-          - service: system_log.write
-            data:
-              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Humidity high ({{ states('sensor.max_indoor_humidity_sensor') }}%), activated normal humidity control (AC to floor temp)."
-              level: warning
-        else:
-          # Humidity is normal - turn off standalone if it's running
+          # Turn off standalone if humidity is normal and it's running
           - if:
               - condition: state
                 entity_id: humidifier.151732605035846_humidifier
@@ -546,7 +534,7 @@ automation:
                   entity_id: humidifier.151732605035846_humidifier
               - service: system_log.write
                 data:
-                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Auto-disabled - target reached. Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
+                  message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Quick Heat: Humidity normal ({{ states('sensor.max_indoor_humidity_sensor') }}%). Turned off standalone."
                   level: warning
     mode: single
 
