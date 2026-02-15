@@ -630,6 +630,18 @@ automation:
           {{ state_attr('climate.coordinated_thermostat', 'current_temperature') | float(999)
              <= (states('input_number.coordinated_humidity_floor_temp') | float(70) + states('input_number.coordinated_floor_temp_tolerance') | float(1.0)) }}
     action:
+      # Check if standalone is already running to avoid duplicate activation
+      - if:
+          - condition: state
+            entity_id: humidifier.151732605035846_humidifier
+            state: "on"
+        then:
+          - service: system_log.write
+            data:
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Standalone Fallback triggered but standalone already running."
+              level: warning
+          - stop: "Standalone already running"
+
       - choose:
           # Path 1: AC turned off (normal case - AC reached floor temp)
           - conditions:
