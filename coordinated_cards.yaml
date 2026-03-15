@@ -138,19 +138,19 @@ cards:
           type: horizontal-stack
           cards:
             - type: custom:mushroom-template-card
-              entity: input_number.coordinated_day_sun_offset
-              primary: "Sunrise offset: {{ states('input_number.coordinated_day_sun_offset') | int(0) }}m"
+              primary: "Day: {{ states('sensor.coordinated_day_trigger_time')[:5] }}"
+              secondary: "Sunrise {{ states('input_number.coordinated_day_sun_offset') | int(-30) }}m (edit in YAML)"
               icon: mdi:weather-sunset-up
               icon_color: amber
               tap_action:
-                action: more-info
+                action: none
             - type: custom:mushroom-template-card
-              entity: input_number.coordinated_night_sun_offset
-              primary: "Sunset offset: {{ states('input_number.coordinated_night_sun_offset') | int(0) }}m"
+              primary: "Night: {{ states('sensor.coordinated_night_trigger_time')[:5] }}"
+              secondary: "Sunset {{ states('input_number.coordinated_night_sun_offset') | int(-30) }}m (edit in YAML)"
               icon: mdi:weather-sunset-down
               icon_color: indigo
               tap_action:
-                action: more-info
+                action: none
       - type: conditional
         conditions:
           - condition: state
@@ -211,9 +211,11 @@ cards:
           - Schedule Enabled: {{ states('input_boolean.coordinated_schedule_enabled') }}
           - Use Sun: {{ states('input_boolean.coordinated_use_sun') }}
 
-          ## Offsets & Tolerances
-          - Day Offset: {{ states('input_number.coordinated_day_sun_offset') | int }} min
-          - Night Offset: {{ states('input_number.coordinated_night_sun_offset') | int }} min
+          ## Schedule Triggers
+          - Day trigger: {{ states('sensor.coordinated_day_trigger_time')[:5] }} (sunrise {{ states('input_number.coordinated_day_sun_offset') | int(-30) }}m — edit offset in YAML)
+          - Night trigger: {{ states('sensor.coordinated_night_trigger_time')[:5] }} (sunset {{ states('input_number.coordinated_night_sun_offset') | int(-30) }}m — edit offset in YAML)
+
+          ## Tolerances
           - Hot Tolerance: {{ states('input_number.coordinated_hot_tolerance') }}°F
           - Cold Tolerance: {{ states('input_number.coordinated_cold_tolerance') }}°F
           - Floor Tolerance: {{ states('input_number.coordinated_floor_temp_tolerance') }}°F
