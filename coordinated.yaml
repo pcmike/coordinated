@@ -14,25 +14,6 @@
 # ==============================================================================
 
 # ==============================================================================
-# SCHEDULE OFFSET CONFIGURATION
-# ==============================================================================
-# Day and night mode fire this many minutes BEFORE sunrise/sunset respectively.
-# Currently: -30 minutes (30 min before both sunrise and sunset).
-#
-# TO CHANGE THE OFFSET:
-#   1. Update the two "offset:" values in the Day Mode and Night Mode automation
-#      triggers below — search for "# SCHEDULE OFFSET" to find them.
-#   2. Update the coordinated_day_sun_offset and coordinated_night_sun_offset
-#      default values in the first-run initialization section (search for
-#      "Set schedule defaults").
-#   3. Reload automations: Developer Tools → YAML → Reload Automations.
-#
-# Offset format: "-HH:MM:SS" = before event, "HH:MM:SS" = after event
-# Examples: "-00:30:00" = 30 min before  |  "00:30:00" = 30 min after
-#           "-01:00:00" = 1 hour before   |  "00:15:00" = 15 min after
-# ==============================================================================
-
-# ==============================================================================
 # USER CONFIGURATION
 # ==============================================================================
 # Adjust these values via Home Assistant dashboard or edit defaults here.
@@ -902,6 +883,21 @@ automation:
               message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: First run - applied default settings (sun-based scheduling enabled, -30min sunset offset)"
               level: warning
 
+      # Migration: fix day_sun_offset if still at old default of 0 (should be -30)
+      - if:
+          - condition: template
+            value_template: "{{ states('input_number.coordinated_day_sun_offset') | int(99) == 0 }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.coordinated_day_sun_offset
+            data:
+              value: -30
+          - service: system_log.write
+            data:
+              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Migrated day_sun_offset 0 → -30."
+              level: warning
+
       # If humidity_active is on but humidity is below threshold, exit humidity mode
       - if:
           - condition: state
@@ -1261,36 +1257,11 @@ automation:
   # ============================================================================
   - id: coordinated_day_mode
     alias: "Coordinated: Day Mode"
-    description: "Switch to day temperature at sunrise-offset (sun mode) or fixed time"
+    description: "Switch to day temperature at configured sunrise offset or fixed time"
     trigger:
-      # Sun mode: native HA sun trigger — fires reliably at the exact offset from sunrise.
-      # Change the offset here AND in the SCHEDULE OFFSET CONFIGURATION block at the top.
-      - platform: sun
-        event: sunrise
-        offset: "-00:30:00"  # SCHEDULE OFFSET — 30 min before sunrise
-        id: "sun_mode"
-      # Fixed-time mode: fires directly on the configured input_datetime — reliable native trigger.
       - platform: time
-        at: input_datetime.coordinated_day_start
-        id: "fixed_time"
+        at: sensor.coordinated_day_trigger_time
     condition:
-      # Sun trigger only fires when use_sun is on; fixed_time only when off
-      - condition: or
-        conditions:
-          - condition: and
-            conditions:
-              - condition: state
-                entity_id: input_boolean.coordinated_use_sun
-                state: "on"
-              - condition: trigger
-                id: "sun_mode"
-          - condition: and
-            conditions:
-              - condition: state
-                entity_id: input_boolean.coordinated_use_sun
-                state: "off"
-              - condition: trigger
-                id: "fixed_time"
       # Only if schedule is enabled
       - condition: state
         entity_id: input_boolean.coordinated_schedule_enabled
@@ -1324,36 +1295,11 @@ automation:
   # ============================================================================
   - id: coordinated_night_mode
     alias: "Coordinated: Night Mode"
-    description: "Switch to night temperature at sunset-offset (sun mode) or fixed time"
+    description: "Switch to night temperature at configured sunset offset or fixed time"
     trigger:
-      # Sun mode: native HA sun trigger — fires reliably at the exact offset from sunset.
-      # Change the offset here AND in the SCHEDULE OFFSET CONFIGURATION block at the top.
-      - platform: sun
-        event: sunset
-        offset: "-00:30:00"  # SCHEDULE OFFSET — 30 min before sunset
-        id: "sun_mode"
-      # Fixed-time mode: fires directly on the configured input_datetime — reliable native trigger.
       - platform: time
-        at: input_datetime.coordinated_night_start
-        id: "fixed_time"
+        at: sensor.coordinated_night_trigger_time
     condition:
-      # Sun trigger only fires when use_sun is on; fixed_time only when off
-      - condition: or
-        conditions:
-          - condition: and
-            conditions:
-              - condition: state
-                entity_id: input_boolean.coordinated_use_sun
-                state: "on"
-              - condition: trigger
-                id: "sun_mode"
-          - condition: and
-            conditions:
-              - condition: state
-                entity_id: input_boolean.coordinated_use_sun
-                state: "off"
-              - condition: trigger
-                id: "fixed_time"
       # Only if schedule is enabled
       - condition: state
         entity_id: input_boolean.coordinated_schedule_enabled
