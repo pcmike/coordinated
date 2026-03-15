@@ -883,20 +883,18 @@ automation:
               message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated Startup: First run - applied default settings (sun-based scheduling enabled, -30min sunset offset)"
               level: warning
 
-      # Migration: fix day_sun_offset if still at old default of 0 (should be -30)
-      - if:
-          - condition: template
-            value_template: "{{ states('input_number.coordinated_day_sun_offset') | int(99) == 0 }}"
-        then:
-          - service: input_number.set_value
-            target:
-              entity_id: input_number.coordinated_day_sun_offset
-            data:
-              value: -30
-          - service: system_log.write
-            data:
-              message: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }} - Coordinated: Migrated day_sun_offset 0 → -30."
-              level: warning
+      # Always sync sun offset display values to match the hardcoded trigger offsets.
+      # Update these two values whenever you change offset: in the Day/Night Mode triggers.
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.coordinated_day_sun_offset
+        data:
+          value: -30  # KEEP IN SYNC with offset: in Day Mode trigger
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.coordinated_night_sun_offset
+        data:
+          value: -30  # KEEP IN SYNC with offset: in Night Mode trigger
 
       # If humidity_active is on but humidity is below threshold, exit humidity mode
       - if:

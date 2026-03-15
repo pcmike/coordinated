@@ -71,7 +71,7 @@ cards:
     title-card:
       type: markdown
       content: |
-        {% if is_state('input_boolean.coordinated_schedule_enabled', 'off') %}🚫 **Schedule Off** — Day/night automation disabled{% else %}{% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}{% if use_sun %}{% set day_str = 'Sunrise −30m' %}{% set night_str = 'Sunset −30m' %}{% else %}{% set day_time = states('input_datetime.coordinated_day_start') | default('06:00:00', true) %}{% set day_hour = day_time.split(':')[0] | int(0) %}{% set day_min = day_time.split(':')[1] | default('00', true) %}{% set day_ampm = 'AM' if day_hour < 12 else 'PM' %}{% set day_hour_12 = day_hour if day_hour <= 12 else day_hour - 12 %}{% set day_hour_12 = 12 if day_hour_12 == 0 else day_hour_12 %}{% set day_str = day_hour_12 | string ~ ':' ~ day_min ~ ' ' ~ day_ampm %}{% set night_time = states('input_datetime.coordinated_night_start') | default('21:00:00', true) %}{% set night_hour = night_time.split(':')[0] | int(0) %}{% set night_min = night_time.split(':')[1] | default('00', true) %}{% set night_ampm = 'AM' if night_hour < 12 else 'PM' %}{% set night_hour_12 = night_hour if night_hour <= 12 else night_hour - 12 %}{% set night_hour_12 = 12 if night_hour_12 == 0 else night_hour_12 %}{% set night_str = night_hour_12 | string ~ ':' ~ night_min ~ ' ' ~ night_ampm %}{% endif %}🕐 **Schedule** — ☀️ {{ states('input_number.coordinated_day_temp') | int(76) }}°F at {{ day_str }} · 🌙 {{ states('input_number.coordinated_night_temp') | int(73) }}°F at {{ night_str }}{% endif %}
+        {% if is_state('input_boolean.coordinated_schedule_enabled', 'off') %}🚫 **Schedule Off** — Day/night automation disabled{% else %}{% set use_sun = is_state('input_boolean.coordinated_use_sun', 'on') %}{% set day_offset = states('input_number.coordinated_day_sun_offset') | int(-30) %}{% set night_offset = states('input_number.coordinated_night_sun_offset') | int(-30) %}{% if use_sun %}{% set day_str = 'Sunrise ' ~ day_offset ~ 'm' %}{% set night_str = 'Sunset ' ~ night_offset ~ 'm' %}{% else %}{% set day_time = states('input_datetime.coordinated_day_start') | default('06:00:00', true) %}{% set day_hour = day_time.split(':')[0] | int(0) %}{% set day_min = day_time.split(':')[1] | default('00', true) %}{% set day_ampm = 'AM' if day_hour < 12 else 'PM' %}{% set day_hour_12 = day_hour if day_hour <= 12 else day_hour - 12 %}{% set day_hour_12 = 12 if day_hour_12 == 0 else day_hour_12 %}{% set day_str = day_hour_12 | string ~ ':' ~ day_min ~ ' ' ~ day_ampm %}{% set night_time = states('input_datetime.coordinated_night_start') | default('21:00:00', true) %}{% set night_hour = night_time.split(':')[0] | int(0) %}{% set night_min = night_time.split(':')[1] | default('00', true) %}{% set night_ampm = 'AM' if night_hour < 12 else 'PM' %}{% set night_hour_12 = night_hour if night_hour <= 12 else night_hour - 12 %}{% set night_hour_12 = 12 if night_hour_12 == 0 else night_hour_12 %}{% set night_str = night_hour_12 | string ~ ':' ~ night_min ~ ' ' ~ night_ampm %}{% endif %}🕐 **Schedule** — ☀️ {{ states('input_number.coordinated_day_temp') | int(76) }}°F at {{ day_str }} · 🌙 {{ states('input_number.coordinated_night_temp') | int(73) }}°F at {{ night_str }}{% endif %}
     title-card-button-overlay: true
     cards:
       - type: horizontal-stack
@@ -138,15 +138,15 @@ cards:
           type: horizontal-stack
           cards:
             - type: custom:mushroom-template-card
-              primary: "Day: {{ ((state_attr('sun.sun', 'next_rising') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }}"
-              secondary: "Sunrise −30m (edit offset in YAML)"
+              primary: "Day: {{ ((state_attr('sun.sun', 'next_rising') | as_datetime | as_local) + timedelta(minutes=states('input_number.coordinated_day_sun_offset') | int(-30))).strftime('%H:%M') }}"
+              secondary: "Sunrise {{ states('input_number.coordinated_day_sun_offset') | int(-30) }}m (edit in YAML)"
               icon: mdi:weather-sunset-up
               icon_color: amber
               tap_action:
                 action: none
             - type: custom:mushroom-template-card
-              primary: "Night: {{ ((state_attr('sun.sun', 'next_setting') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }}"
-              secondary: "Sunset −30m (edit offset in YAML)"
+              primary: "Night: {{ ((state_attr('sun.sun', 'next_setting') | as_datetime | as_local) + timedelta(minutes=states('input_number.coordinated_night_sun_offset') | int(-30))).strftime('%H:%M') }}"
+              secondary: "Sunset {{ states('input_number.coordinated_night_sun_offset') | int(-30) }}m (edit in YAML)"
               icon: mdi:weather-sunset-down
               icon_color: indigo
               tap_action:
@@ -213,8 +213,8 @@ cards:
           - Use Sun: {{ states('input_boolean.coordinated_use_sun') }}
 
           ## Schedule Triggers
-          - Day trigger: {{ ((state_attr('sun.sun', 'next_rising') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }} (sunrise −30m, hardcoded in YAML)
-          - Night trigger: {{ ((state_attr('sun.sun', 'next_setting') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }} (sunset −30m, hardcoded in YAML)
+          - Day trigger: {{ ((state_attr('sun.sun', 'next_rising') | as_datetime | as_local) + timedelta(minutes=states('input_number.coordinated_day_sun_offset') | int(-30))).strftime('%H:%M') }} (sunrise {{ states('input_number.coordinated_day_sun_offset') | int(-30) }}m)
+          - Night trigger: {{ ((state_attr('sun.sun', 'next_setting') | as_datetime | as_local) + timedelta(minutes=states('input_number.coordinated_night_sun_offset') | int(-30))).strftime('%H:%M') }} (sunset {{ states('input_number.coordinated_night_sun_offset') | int(-30) }}m)
 
           ## Tolerances
           - Hot Tolerance: {{ states('input_number.coordinated_hot_tolerance') }}°F
