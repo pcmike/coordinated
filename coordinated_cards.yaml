@@ -202,6 +202,7 @@ cards:
           - ON Threshold: {{ states('input_number.coordinated_humidity_on_threshold') }}%
           - OFF Threshold: {{ states('input_number.coordinated_humidity_off_threshold') }}%
           - Trigger Value: {{ states('input_number.coordinated_trigger_humidity') }}%
+          - Started: {% set dt = states('input_datetime.coordinated_humidity_start_time') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt and dt != 'unknown' else 'N/A' }}
 
           ## Control Flags
           - Humidity Enabled: {{ states('input_boolean.coordinated_humidity_enabled') }}
@@ -225,3 +226,23 @@ cards:
           - Standalone: {{ states('humidifier.151732605035846_humidifier') }}
           - Generic: {{ states('climate.coordinated_thermostat') }}
           - Physical: {{ states('climate.smart_thermostat') }}
+
+          ## Last Triggered
+          - HA restart: {% set dt = state_attr('automation.coordinated_startup_sync', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Day Mode: {% set dt = state_attr('automation.coordinated_day_mode', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Night Mode: {% set dt = state_attr('automation.coordinated_night_mode', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Humidity High: {% set dt = state_attr('automation.coordinated_humidity_high', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Humidity Normal: {% set dt = state_attr('automation.coordinated_humidity_normal', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Standalone Fallback: {% set dt = state_attr('automation.coordinated_standalone_fallback', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Manual Override: {% set dt = state_attr('automation.coordinated_manual_override', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+          - Clear Suppression: {% set dt = state_attr('automation.coordinated_clear_suppression', 'last_triggered') %}{{ (dt | as_datetime | as_local | as_timestamp | timestamp_custom('%m/%d %H:%M')) if dt else 'Never' }}
+
+          ## Automation Status
+          - Day Mode: {{ states('automation.coordinated_day_mode') }}
+          - Night Mode: {{ states('automation.coordinated_night_mode') }}
+          - Humidity High: {{ states('automation.coordinated_humidity_high') }}
+          - Humidity Normal: {{ states('automation.coordinated_humidity_normal') }}
+          - Standalone Fallback: {{ states('automation.coordinated_standalone_fallback') }}
+          - Manual Override: {{ states('automation.coordinated_manual_override') }}
+          - Clear Suppression: {{ states('automation.coordinated_clear_suppression') }}
+          - Startup Sync: {{ states('automation.coordinated_startup_sync') }}
