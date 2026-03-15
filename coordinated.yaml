@@ -253,30 +253,6 @@ template:
         state: "{{ is_state('humidifier.151732605035846_humidifier', 'on') }}"
         icon: mdi:air-humidifier
 
-  - sensor:
-      - name: "Coordinated Day Trigger Time"
-        unique_id: coordinated_day_trigger_time
-        state: >
-          {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
-            {% set sunrise = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
-            {% set offset = states('input_number.coordinated_day_sun_offset') | int(0) %}
-            {{ (sunrise + timedelta(minutes=offset)).strftime('%H:%M:%S') }}
-          {% else %}
-            {{ states('input_datetime.coordinated_day_start') }}
-          {% endif %}
-        icon: mdi:weather-sunny
-
-      - name: "Coordinated Night Trigger Time"
-        unique_id: coordinated_night_trigger_time
-        state: >
-          {% if is_state('input_boolean.coordinated_use_sun', 'on') %}
-            {% set sunset = state_attr('sun.sun', 'next_setting') | as_datetime | as_local %}
-            {% set offset = states('input_number.coordinated_night_sun_offset') | int(0) %}
-            {{ (sunset + timedelta(minutes=offset)).strftime('%H:%M:%S') }}
-          {% else %}
-            {{ states('input_datetime.coordinated_night_start') }}
-          {% endif %}
-        icon: mdi:weather-night
 
 # ==============================================================================
 # CLIMATE - GENERIC THERMOSTAT
