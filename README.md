@@ -14,10 +14,10 @@ A Home Assistant package that coordinates AC and standalone dehumidifier control
 4. **Humidity normal (<47%)**: Returns to previous temperature, turns off standalone dehumidifier
 
 ### Day/Night Scheduling
-1. **Day mode**: At configured time or sunrise, sets thermostat to day temperature
-2. **Night mode**: At configured time or sunset, sets thermostat to night temperature
-3. **Sun tracking**: Optionally use sunrise/sunset with adjustable offset (-120 to +120 minutes)
-4. **Humidity priority**: Schedule skips if humidity control is active
+1. **Day mode**: At configured time or sunrise+offset, sets thermostat to day temperature
+2. **Night mode**: At configured time or sunset+offset, sets thermostat to night temperature
+3. **Sun tracking**: Optionally use sunrise/sunset with adjustable offset (-120 to +120 minutes). Negative offsets (before sunrise/sunset) are fully supported.
+4. **Humidity priority**: Schedule skips if humidity control is active; schedule is applied when humidity clears instead
 5. **Toggle**: Can be disabled entirely via dashboard
 
 ### Quick Heat (Optional)
@@ -118,10 +118,12 @@ All user-configurable options are at the top of `coordinated.yaml`:
 | `coordinated_use_sun` | On | Use sunrise/sunset instead of fixed times |
 | `coordinated_day_temp` | 76°F | Temperature during daytime hours |
 | `coordinated_night_temp` | 73°F | Temperature during nighttime hours |
-| `coordinated_day_sun_offset` | 0 min | Minutes before (-) or after (+) sunrise |
-| `coordinated_night_sun_offset` | -30 min | Minutes before (-) or after (+) sunset |
+| `coordinated_day_sun_offset` | -30 min | Display only — mirrors the trigger offset below |
+| `coordinated_night_sun_offset` | -30 min | Display only — mirrors the trigger offset below |
 | `coordinated_day_start` | 6:00 AM | Time to switch to day temperature (when using fixed times) |
 | `coordinated_night_start` | 9:00 PM | Time to switch to night temperature (when using fixed times) |
+
+**Sun mode offset:** Both day and night triggers use `platform: sun` with a hardcoded `-30 min` offset (fires 30 minutes before sunrise/sunset). To change the offset, edit the `offset:` values in the Day Mode and Night Mode automation triggers in `coordinated.yaml` — search for `# SCHEDULE OFFSET`. The `coordinated_day_sun_offset` and `coordinated_night_sun_offset` input numbers are kept in sync for dashboard display and internal day/night calculations but do not control the trigger time directly.
 
 ### Advanced Configuration
 
@@ -251,8 +253,8 @@ Update these in `coordinated.yaml` to match your setup:
 6. **Startup Sync**: Synchronizes state after Home Assistant restart, including setting correct day/night temperature based on schedule and checking if standalone should be running
 
 ### Day/Night Schedule
-7. **Day Mode**: Switches to day temperature at scheduled time or sunrise (skips if humidity control active)
-8. **Night Mode**: Switches to night temperature at scheduled time or sunset (skips if humidity control active)
+7. **Day Mode**: Two triggers — `platform: sun` event: sunrise with `-00:30:00` offset (sun mode, rock solid native HA trigger) and `platform: time` at `input_datetime.coordinated_day_start` (fixed time mode). Conditions gate which fires based on `coordinated_use_sun`. Skips if humidity control or Quick Heat active.
+8. **Night Mode**: Same pattern — `platform: sun` event: sunset with `-00:30:00` offset and `platform: time` at `input_datetime.coordinated_night_start`.
 
 ## Notifications & Logging
 
@@ -271,6 +273,21 @@ All events are logged at WARNING level with "Coordinated:" prefix for easy filte
 - Trigger at 52%, still at 50.5% in 60 min → Notification (dropped only 1.5%)
 - Standalone activates automatically at 30 seconds or 30 minutes → No notification (working as designed)
 - Humidity clears before 60 min → No notification
+
+## Troubleshooting
+
+### Day/Night Mode Not Firing
+
+**Symptom:** "Coordinated: Day Mode" or "Night Mode" automation shows "Never triggered" in HA.
+
+**Fix:**
+1. Reload automations (Developer Tools → YAML → Reload Automations)
+2. Manually trigger the Day or Night Mode automation once from Settings → Automations (since the current day's trigger has already passed)
+3. Going forward it will fire reliably — `platform: sun` is a native HA trigger designed for exactly this purpose
+
+**Changing the offset:** Edit `offset:` in the Day Mode and Night Mode automation triggers in `coordinated.yaml`. Search for `# SCHEDULE OFFSET` to find both lines. Reload automations after changing.
+
+---
 
 ## Known Edge Cases
 
