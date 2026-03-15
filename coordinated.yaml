@@ -691,7 +691,7 @@ automation:
         state: "on"
       # Not when Quick Heat is active (83°F target is expected)
       - condition: template
-        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
+        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') != 'on' }}"
       # And temperature is no longer at floor temp (actual manual override)
       - condition: template
         value_template: "{{ state_attr('climate.coordinated_thermostat', 'temperature') | float(0) != states('input_number.coordinated_humidity_floor_temp') | float(70) }}"
@@ -1005,7 +1005,7 @@ automation:
       # Case 3: Quick Heat OFF + humidity HIGH + humidity_active OFF = activate normal humidity control
       - if:
           - condition: template
-            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') != 'on' }}"
           - condition: state
             entity_id: input_boolean.coordinated_humidity_enabled
             state: "on"
@@ -1061,7 +1061,7 @@ automation:
             entity_id: input_boolean.coordinated_humidity_active
             state: "off"
           - condition: template
-            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
+            value_template: "{{ states('input_boolean.coordinated_quick_heat_active') != 'on' }}"
         then:
           - service: climate.set_temperature
             target:
@@ -1267,7 +1267,7 @@ automation:
         state: "off"
       # And Quick Heat is not active
       - condition: template
-        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
+        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') != 'on' }}"
     action:
       - service: climate.set_temperature
         target:
@@ -1326,7 +1326,7 @@ automation:
         state: "off"
       # And Quick Heat is not active
       - condition: template
-        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') == 'off' }}"
+        value_template: "{{ states('input_boolean.coordinated_quick_heat_active') != 'on' }}"
     action:
       - service: climate.set_temperature
         target:
