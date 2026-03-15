@@ -118,12 +118,12 @@ All user-configurable options are at the top of `coordinated.yaml`:
 | `coordinated_use_sun` | On | Use sunrise/sunset instead of fixed times |
 | `coordinated_day_temp` | 76°F | Temperature during daytime hours |
 | `coordinated_night_temp` | 73°F | Temperature during nighttime hours |
-| `coordinated_day_sun_offset` | -30 min | Display only — mirrors the trigger offset below |
-| `coordinated_night_sun_offset` | -30 min | Display only — mirrors the trigger offset below |
+| `coordinated_day_sun_offset` | -30 min | Display only — written by Startup Sync to match the YAML trigger offset |
+| `coordinated_night_sun_offset` | -30 min | Display only — written by Startup Sync to match the YAML trigger offset |
 | `coordinated_day_start` | 6:00 AM | Time to switch to day temperature (when using fixed times) |
 | `coordinated_night_start` | 9:00 PM | Time to switch to night temperature (when using fixed times) |
 
-**Sun mode offset:** Both day and night triggers use `platform: sun` with a hardcoded `-30 min` offset (fires 30 minutes before sunrise/sunset). To change the offset, edit the `offset:` values in the Day Mode and Night Mode automation triggers in `coordinated.yaml` — search for `# SCHEDULE OFFSET`. The `coordinated_day_sun_offset` and `coordinated_night_sun_offset` input numbers are kept in sync for dashboard display and internal day/night calculations but do not control the trigger time directly.
+**Sun mode offset:** Both day and night triggers use `platform: sun` with independent hardcoded offsets (default `-30 min` each, firing 30 minutes before sunrise/sunset). To change an offset, update **two lines in `coordinated.yaml`**: (1) the `offset:` value in the Day or Night Mode automation trigger — search for `# SCHEDULE OFFSET` to find them, and (2) the matching `value:` in the Startup Sync "Always sync sun offset" section. On every HA restart, Startup Sync writes these values into `coordinated_day_sun_offset` and `coordinated_night_sun_offset` so the dashboard always displays the correct offset. The input_number entities are display-only and do not control the trigger time.
 
 ### Advanced Configuration
 
@@ -158,10 +158,13 @@ Use `coordinated_cards.yaml` for a compact view with:
 The debug section shows real-time values for:
 - Current time, sunrise, and sunset times
 - All temperature settings and current values
-- All humidity values and thresholds
+- All humidity values, thresholds, and when humidity control started (60-min alert countdown reference)
 - All control flags (humidity active, suppressed, quick heat, schedule, etc.)
+- Actual schedule trigger times computed from sun position + offset
 - Tolerance values (hot, cold, floor)
 - Device states (AC, standalone, generic thermostat, physical thermostat)
+- **Last triggered timestamp** for every automation (most useful for diagnosing why something didn't fire)
+- **Enabled/disabled status** for every automation (catches accidentally disabled automations)
 
 ### Separate Cards
 Use `coordinated_temperature_card.yaml` and `coordinated_humidity_card.yaml` if you prefer individual cards.
@@ -285,7 +288,7 @@ All events are logged at WARNING level with "Coordinated:" prefix for easy filte
 2. Manually trigger the Day or Night Mode automation once from Settings → Automations (since the current day's trigger has already passed)
 3. Going forward it will fire reliably — `platform: sun` is a native HA trigger designed for exactly this purpose
 
-**Changing the offset:** Edit `offset:` in the Day Mode and Night Mode automation triggers in `coordinated.yaml`. Search for `# SCHEDULE OFFSET` to find both lines. Reload automations after changing.
+**Changing the offset:** Update two things in `coordinated.yaml`: (1) search for `# SCHEDULE OFFSET` to find the `offset:` lines in Day Mode and Night Mode triggers, (2) update the matching `value:` lines in the Startup Sync "Always sync sun offset" section directly below the first-run block. Reload automations after changing.
 
 ---
 
