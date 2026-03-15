@@ -138,21 +138,19 @@ cards:
           type: horizontal-stack
           cards:
             - type: custom:mushroom-template-card
-              entity: input_number.coordinated_day_sun_offset
-              primary: "Day: {{ states('sensor.coordinated_day_trigger_time')[:5] }}"
-              secondary: "Sunrise {{ states('input_number.coordinated_day_sun_offset') | int(-30) }}m — tap to change"
+              primary: "Day: {{ ((state_attr('sun.sun', 'next_rising') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }}"
+              secondary: "Sunrise −30m (edit offset in YAML)"
               icon: mdi:weather-sunset-up
               icon_color: amber
               tap_action:
-                action: more-info
+                action: none
             - type: custom:mushroom-template-card
-              entity: input_number.coordinated_night_sun_offset
-              primary: "Night: {{ states('sensor.coordinated_night_trigger_time')[:5] }}"
-              secondary: "Sunset {{ states('input_number.coordinated_night_sun_offset') | int(-30) }}m — tap to change"
+              primary: "Night: {{ ((state_attr('sun.sun', 'next_setting') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }}"
+              secondary: "Sunset −30m (edit offset in YAML)"
               icon: mdi:weather-sunset-down
               icon_color: indigo
               tap_action:
-                action: more-info
+                action: none
       - type: conditional
         conditions:
           - condition: state
@@ -215,8 +213,8 @@ cards:
           - Use Sun: {{ states('input_boolean.coordinated_use_sun') }}
 
           ## Schedule Triggers
-          - Day trigger: {{ states('sensor.coordinated_day_trigger_time')[:5] }} (sunrise {{ states('input_number.coordinated_day_sun_offset') | int(-30) }}m)
-          - Night trigger: {{ states('sensor.coordinated_night_trigger_time')[:5] }} (sunset {{ states('input_number.coordinated_night_sun_offset') | int(-30) }}m)
+          - Day trigger: {{ ((state_attr('sun.sun', 'next_rising') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }} (sunrise −30m, hardcoded in YAML)
+          - Night trigger: {{ ((state_attr('sun.sun', 'next_setting') | as_datetime | as_local) + timedelta(minutes=-30)).strftime('%H:%M') }} (sunset −30m, hardcoded in YAML)
 
           ## Tolerances
           - Hot Tolerance: {{ states('input_number.coordinated_hot_tolerance') }}°F

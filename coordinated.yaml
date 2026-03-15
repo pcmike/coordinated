@@ -1257,11 +1257,32 @@ automation:
   # ============================================================================
   - id: coordinated_day_mode
     alias: "Coordinated: Day Mode"
-    description: "Switch to day temperature at configured sunrise offset or fixed time"
+    description: "Switch to day temperature at sunrise-offset (sun mode) or fixed time"
     trigger:
+      - platform: sun
+        event: sunrise
+        offset: "-00:30:00"  # SCHEDULE OFFSET — change here + update coordinated_day_sun_offset default in first-run init
+        id: "sun_mode"
       - platform: time
-        at: sensor.coordinated_day_trigger_time
+        at: input_datetime.coordinated_day_start
+        id: "fixed_time"
     condition:
+      - condition: or
+        conditions:
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: input_boolean.coordinated_use_sun
+                state: "on"
+              - condition: trigger
+                id: "sun_mode"
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: input_boolean.coordinated_use_sun
+                state: "off"
+              - condition: trigger
+                id: "fixed_time"
       # Only if schedule is enabled
       - condition: state
         entity_id: input_boolean.coordinated_schedule_enabled
@@ -1295,11 +1316,32 @@ automation:
   # ============================================================================
   - id: coordinated_night_mode
     alias: "Coordinated: Night Mode"
-    description: "Switch to night temperature at configured sunset offset or fixed time"
+    description: "Switch to night temperature at sunset-offset (sun mode) or fixed time"
     trigger:
+      - platform: sun
+        event: sunset
+        offset: "-00:30:00"  # SCHEDULE OFFSET — change here + update coordinated_night_sun_offset default in first-run init
+        id: "sun_mode"
       - platform: time
-        at: sensor.coordinated_night_trigger_time
+        at: input_datetime.coordinated_night_start
+        id: "fixed_time"
     condition:
+      - condition: or
+        conditions:
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: input_boolean.coordinated_use_sun
+                state: "on"
+              - condition: trigger
+                id: "sun_mode"
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: input_boolean.coordinated_use_sun
+                state: "off"
+              - condition: trigger
+                id: "fixed_time"
       # Only if schedule is enabled
       - condition: state
         entity_id: input_boolean.coordinated_schedule_enabled
